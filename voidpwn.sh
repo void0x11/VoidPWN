@@ -62,12 +62,14 @@ show_menu() {
     echo -e "${YELLOW}║         MAIN MENU                  ║${NC}"
     echo -e "${YELLOW}╚════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "  ${CYAN}[1]${NC} WiFi Tools"
-    echo -e "  ${CYAN}[2]${NC} Network Reconnaissance"
-    echo -e "  ${CYAN}[3]${NC} Password Attacks"
-    echo -e "  ${CYAN}[4]${NC} Exploitation Tools"
-    echo -e "  ${CYAN}[5]${NC} System Tools"
-    echo -e "  ${CYAN}[6]${NC} View Captures"
+    echo -e "  ${CYAN}[1]${NC} Auto Scenarios"
+    echo -e "  ${CYAN}[2]${NC} WiFi Tools"
+    echo -e "  ${CYAN}[3]${NC} Network Reconnaissance"
+    echo -e "  ${CYAN}[4]${NC} Password Attacks"
+    echo -e "  ${CYAN}[5]${NC} Exploitation Tools"
+    echo -e "  ${CYAN}[6]${NC} System Tools"
+    echo -e "  ${CYAN}[7]${NC} View Captures"
+    echo -e "  ${CYAN}[8]${NC} Web Dashboard"
     echo -e "  ${CYAN}[0]${NC} Exit"
     echo ""
 }
@@ -309,6 +311,49 @@ system_menu() {
     done
 }
 
+# Dashboard menu
+dashboard_menu() {
+    while true; do
+        print_banner
+        echo -e "${YELLOW}╔════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║        Web Dashboard               ║${NC}"
+        echo -e "${YELLOW}╚════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "  ${CYAN}[1]${NC} Start Dashboard"
+        echo -e "  ${CYAN}[2]${NC} Stop Dashboard"
+        echo -e "  ${CYAN}[3]${NC} Dashboard Status"
+        echo -e "  ${CYAN}[4]${NC} Open in Browser"
+        echo -e "  ${CYAN}[0]${NC} Back"
+        echo ""
+        read -p "$(echo -e ${GREEN}Select option: ${NC})" choice
+        
+        case $choice in
+            1) 
+                "$SCRIPT_DIR/dashboard.sh" start
+                ;;
+            2) 
+                "$SCRIPT_DIR/dashboard.sh" stop
+                ;;
+            3) 
+                "$SCRIPT_DIR/dashboard.sh" status
+                ;;
+            4)
+                IP=$(hostname -I | awk '{print $1}')
+                echo ""
+                echo -e "${CYAN}Dashboard URL:${NC}"
+                echo "  http://$IP:5000"
+                echo ""
+                echo "Open this URL in a browser on any device"
+                ;;
+            0) break ;;
+            *) echo -e "${RED}Invalid option${NC}" ;;
+        esac
+        
+        echo ""
+        read -p "Press Enter to continue..."
+    done
+}
+
 # View captures
 view_captures() {
     print_banner
@@ -338,12 +383,14 @@ main() {
         read -p "$(echo -e ${GREEN}Select option: ${NC})" choice
         
         case $choice in
-            1) wifi_menu ;;
-            2) recon_menu ;;
-            3) password_menu ;;
-            4) exploit_menu ;;
-            5) system_menu ;;
-            6) view_captures ;;
+            1) sudo "$SCRIPT_DIR/scenarios.sh" ;;
+            2) wifi_menu ;;
+            3) recon_menu ;;
+            4) password_menu ;;
+            5) exploit_menu ;;
+            6) system_menu ;;
+            7) view_captures ;;
+            8) dashboard_menu ;;
             0) 
                 echo -e "${CYAN}Exiting VoidPWN...${NC}"
                 exit 0

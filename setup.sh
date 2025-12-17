@@ -80,6 +80,11 @@ install_essential_tools() {
         build-essential
     
     log_success "Essential tools installed"
+    
+    # Install Python packages for dashboard
+    log_info "Installing Python packages for dashboard..."
+    pip3 install flask psutil
+    log_success "Python packages installed"
 }
 
 # Install WiFi pentesting tools

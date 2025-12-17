@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoidPWN Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff00;
+            padding: 10px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            border: 2px solid #00ff00;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: rgba(0, 255, 0, 0.05);
+        }
+
+        .ascii-logo {
+            font-size: 12px;
+            line-height: 1.2;
+            color: #00ff00;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .header-info {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            font-size: 11px;
+            gap: 10px;
+        }
+
+        .stat {
+            padding: 5px 10px;
+            border: 1px solid #00ff00;
+            background: rgba(0, 255, 0, 0.1);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .panel {
+            border: 2px solid #00ff00;
+            background: rgba(0, 255, 0, 0.02);
+            padding: 15px;
+        }
+
+        .panel-header {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #00ff00;
+            color: #00ff00;
+        }
+
+        .panel-content {
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        .log-entry {
+            padding: 5px;
+            margin: 3px 0;
+            border-left: 3px solid #00ff00;
+            background: rgba(0, 255, 0, 0.05);
+        }
+
+        .log-entry.success {
+            border-left-color: #00ff00;
+        }
+
+        .log-entry.warning {
+            border-left-color: #ffff00;
+            color: #ffff00;
+        }
+
+        .log-entry.error {
+            border-left-color: #ff0000;
+            color: #ff0000;
+        }
+
+        .log-entry.info {
+            border-left-color: #00ffff;
+            color: #00ffff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        th, td {
+            padding: 5px;
+            text-align: left;
+            border: 1px solid #00ff00;
+        }
+
+        th {
+            background: rgba(0, 255, 0, 0.2);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            border: 1px solid #00ff00;
+            background: rgba(0, 0, 0, 0.5);
+            position: relative;
+            margin: 5px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #00ff00;
+            transition: width 0.3s;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10px;
+            color: #000;
+            font-weight: bold;
+        }
+
+        button {
+            background: transparent;
+            border: 2px solid #00ff00;
+            color: #00ff00;
+            padding: 8px 15px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 11px;
+        }
+
+        button:hover {
+            background: rgba(0, 255, 0, 0.2);
+        }
+
+        button:active {
+            background: rgba(0, 255, 0, 0.3);
+        }
+
+        .terminal {
+            background: #000;
+            border: 2px solid #00ff00;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .terminal::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .terminal::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+
+        .terminal::-webkit-scrollbar-thumb {
+            background: #00ff00;
+        }
+
+        .blink {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px dotted #00ff00;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border: 1px solid #00ff00;
+            font-size: 10px;
+            margin: 2px;
+        }
+
+        .badge.active {
+            background: rgba(0, 255, 0, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header-info {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="ascii-logo">
+╦  ╦┌─┐┬┌┬┐╔═╗╦ ╦╔╗╔  ╔╦╗┌─┐┌─┐┬ ┬┌┐ ┌─┐┌─┐┬─┐┌┬┐
+╚╗╔╝│ │││ ││╠═╝║║║║║║   ║║├─┤└─┐├─┤├┴┐│ │├─┤├┬┘ ││
+ ╚╝ └─┘┴└─┘┴╩  ╚╩╝╝╚╝  ═╩╝┴ ┴└─┘┴ ┴└─┘└─┘┴ ┴┴└──┴┘
+            </div>
+            <div class="header-info">
+                <div class="stat">STATUS: <span id="status" class="blink">ACTIVE</span></div>
+                <div class="stat">IP: <span id="ip">Loading...</span></div>
+                <div class="stat">UPTIME: <span id="uptime">Loading...</span></div>
+                <div class="stat">TEMP: <span id="temp">Loading...</span></div>
+                <div class="stat">ADAPTER: <span id="adapter">Loading...</span></div>
+            </div>
+        </header>
+
+        <div style="text-align: center; margin-bottom: 15px;">
+            <button onclick="refreshAll()">REFRESH ALL</button>
+            <button onclick="showCaptures()">VIEW CAPTURES</button>
+            <button onclick="showRecon()">VIEW RECON</button>
+            <button onclick="clearLogs()">CLEAR LOGS</button>
+        </div>
+
+        <div class="grid">
+            <div class="panel">
+                <div class="panel-header">[SYSTEM METRICS]</div>
+                <div class="panel-content">
+                    <div class="metric">
+                        <span>CPU Usage:</span>
+                        <span id="cpu">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="cpu-bar" style="width: 0%"></div>
+                    </div>
+                    
+                    <div class="metric">
+                        <span>Memory:</span>
+                        <span id="memory">0 MB / 0 MB</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="mem-bar" style="width: 0%"></div>
+                    </div>
+                    
+                    <div class="metric">
+                        <span>Disk:</span>
+                        <span id="disk">0 GB / 0 GB</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="disk-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">[ATTACK STATISTICS]</div>
+                <div class="panel-content">
+                    <div class="metric">
+                        <span>WiFi Scans:</span>
+                        <span id="wifi-scans">0</span>
+                    </div>
+                    <div class="metric">
+                        <span>Handshakes Captured:</span>
+                        <span id="handshakes">0</span>
+                    </div>
+                    <div class="metric">
+                        <span>Network Scans:</span>
+                        <span id="net-scans">0</span>
+                    </div>
+                    <div class="metric">
+                        <span>Hosts Discovered:</span>
+                        <span id="hosts">0</span>
+                    </div>
+                    <div class="metric">
+                        <span>Open Ports Found:</span>
+                        <span id="ports">0</span>
+                    </div>
+                    <div class="metric">
+                        <span>Vulnerabilities:</span>
+                        <span id="vulns">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">[ACTIVE TARGETS]</div>
+                <div class="panel-content">
+                    <table id="targets-table">
+                        <thead>
+                            <tr>
+                                <th>TYPE</th>
+                                <th>TARGET</th>
+                                <th>STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="targets-body">
+                            <tr>
+                                <td colspan="3" style="text-align: center;">No active targets</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="panel" style="grid-column: 1 / -1;">
+                <div class="panel-header">[RECENT ACTIVITY LOG]</div>
+                <div class="terminal" id="activity-log">
+                    <div class="log-entry info">[INFO] VoidPWN Dashboard initialized</div>
+                    <div class="log-entry success">[SUCCESS] System ready</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="panel">
+                <div class="panel-header">[CAPTURED NETWORKS]</div>
+                <div class="panel-content">
+                    <table id="networks-table">
+                        <thead>
+                            <tr>
+                                <th>ESSID</th>
+                                <th>BSSID</th>
+                                <th>CH</th>
+                                <th>PWR</th>
+                            </tr>
+                        </thead>
+                        <tbody id="networks-body">
+                            <tr>
+                                <td colspan="4" style="text-align: center;">No networks scanned</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">[DISCOVERED HOSTS]</div>
+                <div class="panel-content">
+                    <table id="hosts-table">
+                        <thead>
+                            <tr>
+                                <th>IP</th>
+                                <th>MAC</th>
+                                <th>PORTS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hosts-body">
+                            <tr>
+                                <td colspan="3" style="text-align: center;">No hosts discovered</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update system info
+        function updateSystemInfo() {
+            fetch('/api/system')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('ip').textContent = data.ip || 'N/A';
+                    document.getElementById('uptime').textContent = data.uptime || 'N/A';
+                    document.getElementById('temp').textContent = data.temp || 'N/A';
+                    document.getElementById('adapter').textContent = data.adapter || 'N/A';
+                    
+                    document.getElementById('cpu').textContent = data.cpu + '%';
+                    document.getElementById('cpu-bar').style.width = data.cpu + '%';
+                    
+                    document.getElementById('memory').textContent = data.memory;
+                    document.getElementById('mem-bar').style.width = data.memPercent + '%';
+                    
+                    document.getElementById('disk').textContent = data.disk;
+                    document.getElementById('disk-bar').style.width = data.diskPercent + '%';
+                })
+                .catch(e => console.error('Error fetching system info:', e));
+        }
+
+        // Update statistics
+        function updateStats() {
+            fetch('/api/stats')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('wifi-scans').textContent = data.wifiScans || 0;
+                    document.getElementById('handshakes').textContent = data.handshakes || 0;
+                    document.getElementById('net-scans').textContent = data.netScans || 0;
+                    document.getElementById('hosts').textContent = data.hosts || 0;
+                    document.getElementById('ports').textContent = data.ports || 0;
+                    document.getElementById('vulns').textContent = data.vulns || 0;
+                })
+                .catch(e => console.error('Error fetching stats:', e));
+        }
+
+        // Update activity log
+        function updateLog() {
+            fetch('/api/logs')
+                .then(r => r.json())
+                .then(data => {
+                    const log = document.getElementById('activity-log');
+                    data.logs.forEach(entry => {
+                        const div = document.createElement('div');
+                        div.className = `log-entry ${entry.type}`;
+                        div.textContent = `[${entry.type.toUpperCase()}] ${entry.message}`;
+                        log.appendChild(div);
+                    });
+                    log.scrollTop = log.scrollHeight;
+                })
+                .catch(e => console.error('Error fetching logs:', e));
+        }
+
+        // Refresh all data
+        function refreshAll() {
+            addLog('info', 'Refreshing all data...');
+            updateSystemInfo();
+            updateStats();
+            updateLog();
+        }
+
+        // Add log entry
+        function addLog(type, message) {
+            const log = document.getElementById('activity-log');
+            const div = document.createElement('div');
+            div.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            div.textContent = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Clear logs
+        function clearLogs() {
+            document.getElementById('activity-log').innerHTML = '';
+            addLog('info', 'Logs cleared');
+        }
+
+        // Show captures
+        function showCaptures() {
+            addLog('info', 'Loading capture files...');
+            fetch('/api/captures')
+                .then(r => r.json())
+                .then(data => {
+                    addLog('success', `Found ${data.files.length} capture files`);
+                })
+                .catch(e => addLog('error', 'Failed to load captures'));
+        }
+
+        // Show recon results
+        function showRecon() {
+            addLog('info', 'Loading recon results...');
+            fetch('/api/recon')
+                .then(r => r.json())
+                .then(data => {
+                    addLog('success', `Found ${data.files.length} recon files`);
+                })
+                .catch(e => addLog('error', 'Failed to load recon results'));
+        }
+
+        // Initialize
+        updateSystemInfo();
+        updateStats();
+        
+        // Auto-refresh every 5 seconds
+        setInterval(() => {
+            updateSystemInfo();
+            updateStats();
+        }, 5000);
+    </script>
+</body>
+</html>
