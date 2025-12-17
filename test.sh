@@ -21,8 +21,9 @@ TESTS_FAILED=0
 TESTS_WARNING=0
 ISSUES=()
 
-# Output file
-REPORT_FILE="$HOME/VoidPWN/test_report_$(date +%Y%m%d_%H%M%S).txt"
+# Directories
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPORT_FILE="$SCRIPT_DIR/test_report_$(date +%Y%m%d_%H%M%S).txt"
 
 log_info() { echo -e "${BLUE}[TEST]${NC} $1"; }
 log_pass() { 
@@ -61,6 +62,7 @@ Generated: $(date)
 Hostname: $(hostname)
 IP Address: $(hostname -I | awk '{print $1}')
 Kernel: $(uname -r)
+Install Directory: $SCRIPT_DIR
 
 ================================================================================
 TEST RESULTS
@@ -105,7 +107,7 @@ test_file_structure() {
     )
     
     for file in "${files[@]}"; do
-        if [[ -f "$HOME/VoidPWN/$file" ]]; then
+        if [[ -f "$SCRIPT_DIR/$file" ]]; then
             log_pass "File exists: $file"
         else
             log_fail "Missing file: $file"
@@ -121,7 +123,7 @@ test_file_structure() {
     )
     
     for dir in "${dirs[@]}"; do
-        if [[ -d "$HOME/VoidPWN/$dir" ]]; then
+        if [[ -d "$SCRIPT_DIR/$dir" ]]; then
             log_pass "Directory exists: $dir"
         else
             log_warn "Missing directory: $dir (will be created on first use)"
@@ -148,7 +150,7 @@ test_script_permissions() {
     )
     
     for script in "${scripts[@]}"; do
-        if [[ -x "$HOME/VoidPWN/$script" ]]; then
+        if [[ -x "$SCRIPT_DIR/$script" ]]; then
             log_pass "Executable: $script"
         else
             log_fail "Not executable: $script (run: chmod +x $script)"
@@ -175,7 +177,7 @@ test_script_syntax() {
     )
     
     for script in "${scripts[@]}"; do
-        if bash -n "$HOME/VoidPWN/$script" 2>/dev/null; then
+        if bash -n "$SCRIPT_DIR/$script" 2>/dev/null; then
             log_pass "Syntax OK: $script"
         else
             log_fail "Syntax error in: $script"
