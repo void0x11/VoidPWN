@@ -141,10 +141,21 @@ autologin-user-timeout=0
 EOF
 fi
 
-# Kiosk Setup (.xinitrc)
-log_info "Configuring X11 Kiosk..."
+# Kiosk Setup (.xinitrc & .Xresources)
+log_info "Configuring OS-level scaling for 3.5\" TFT..."
+cat > "$USER_HOME/.Xresources" << EOF
+Xft.dpi: 85
+EOF
+
 cat > "$USER_HOME/.xinitrc" << EOF
 #!/bin/bash
+# Load scaling settings
+xrdb -merge ~/.Xresources
+export GDK_SCALE=1
+export GDK_DPI_SCALE=0.85
+export QT_AUTO_SCREEN_SCALE_FACTOR=0
+export QT_FONT_DPI=85
+
 xset -dpms
 xset s off
 xset s noblank
@@ -154,14 +165,14 @@ sleep 5
 chromium --noerrdialogs --disable-infobars --kiosk http://localhost:5000 &
 exec sh /etc/X11/Xsession
 EOF
-chown "$USER_NAME:$USER_NAME" "$USER_HOME/.xinitrc"
+chown "$USER_NAME:$USER_NAME" "$USER_HOME/.xinitrc" "$USER_HOME/.Xresources"
 chmod +x "$USER_HOME/.xinitrc"
 
 # Auto-start X on TTY1
 if ! grep -q "startx" "$USER_HOME/.bashrc"; then
     echo -e "\n# Auto-start Kiosk Mode on tty1\nif [[ -z \$DISPLAY ]] && [[ \$(tty) = /dev/tty1 ]]; then\n    startx -- -nocursor\nfi" >> "$USER_HOME/.bashrc"
 fi
-log_success "Platform configuration applied."
+log_success "Platform configuration and OS scaling applied."
 
 # --- 4. Display & Touch Calibration (Universal) ---
 log_step "PHASE 4: Display & Touch Staging"
