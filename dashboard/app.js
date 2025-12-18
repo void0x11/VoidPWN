@@ -11,7 +11,8 @@ const state = {
     system: {},
     stats: {},
     reports: [],
-    kbVisible: false
+    kbVisible: false,
+    scanningWiFi: false
 };
 
 // --- Initialization ---
@@ -262,6 +263,91 @@ async function scanSubnet(name, ip) {
     }
 }
 
+// --- WiFi Target Selection & Scanning ---
+async function startWiFiScan() {
+    if (state.scanningWiFi) return;
+    state.scanningWiFi = true;
+
+    const btn = document.getElementById('wifi-refresh-btn');
+    const container = document.getElementById('nearby-wifi-list');
+
+    log("INITIATING WIFI SPECTRUM SCAN (15s)...", "info");
+    const res = await api('/api/scan/start');
+
+    if (res.status === 'success') {
+        let countdown = res.duration || 15;
+        btn.disabled = true;
+
+        const timer = setInterval(() => {
+            btn.textContent = `SCANNING... ${countdown}s`;
+            countdown--;
+            if (countdown < 0) {
+                clearInterval(timer);
+                btn.disabled = false;
+                btn.textContent = "REFRESH NETWORKS";
+                state.scanningWiFi = false;
+                loadWiFiResults();
+            }
+        }, 1000);
+
+        container.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--primary)">SCANNING SPECTRUM... PLEASE WAIT</div>';
+    } else {
+        state.scanningWiFi = false;
+        log("WiFi scan failed to start", "error");
+    }
+}
+
+async function loadWiFiResults() {
+    const container = document.getElementById('nearby-wifi-list');
+    container.innerHTML = '<div style="text-align:center; padding: 20px;">FETCHING RESULTS...</div>';
+
+    const res = await api('/api/scan/results');
+    if (res.networks && res.networks.length > 0) {
+        container.innerHTML = '';
+        res.networks.forEach(net => {
+            const card = document.createElement('div');
+            card.className = `device-card ${state.selectedNetwork?.bssid === net.bssid ? 'selected' : ''}`;
+            card.style.cursor = 'pointer';
+            card.style.borderLeft = `4px solid ${net.privacy.includes('WPA') ? '#ff3366' : '#ffee00'}`;
+
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:bold">${net.essid || '<HIDDEN>'}</span>
+                    <span style="color:var(--text-dim); font-size:0.7rem">${net.power} dBm</span>
+                </div>
+                <div style="font-size:0.7rem; color:var(--primary); font-family:var(--font-mono)">${net.bssid}</div>
+                <div style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:5px">
+                    <span>CH: ${net.channel}</span>
+                    <span>${net.privacy}</span>
+                </div>
+            `;
+            card.onclick = () => selectWiFiNetwork(net.bssid, net.essid, net.channel);
+            container.appendChild(card);
+        });
+        log(`✓ Found ${res.networks.length} networks`, 'success');
+    } else {
+        container.innerHTML = '<div style="text-align:center; padding: 20px; color:var(--text-dim)">No networks found. Try scanning again.</div>';
+    }
+}
+
+async function selectWiFiNetwork(bssid, essid, channel) {
+    state.selectedNetwork = {
+        type: 'wifi',
+        bssid: bssid,
+        ssid: essid || bssid,
+        channel: channel
+    };
+    state.selectedDevice = null;
+
+    // Notify server of target change if needed (optional for BSSID as runAction handles it)
+    await api('/api/target/select', 'POST', state.selectedNetwork);
+
+    updateTargetDisplays();
+    loadWiFiResults(); // Re-render to show selection
+    renderDeviceList(); // Sync inventory
+    log(`Target WiFi set to: ${essid || bssid}`);
+}
+
 // --- Attacks & Recon ---
 async function runAction(action, data = {}) {
     const ipTarget = state.selectedDevice ? state.selectedDevice.ip : null;
@@ -270,6 +356,9 @@ async function runAction(action, data = {}) {
     // Determine target based on action type
     const wifiActions = ['deauth', 'evil_twin', 'handshake', 'pmkid', 'pixie', 'auth', 'wifite'];
     let target = wifiActions.includes(action) ? wifiTarget : ipTarget;
+
+    // Special handling for Crack: doesn't strictly need a live target if file exists
+    if (action === 'crack') target = 'LATEST_CAPTURE';
 
     // Special handling for ARP
     if (action === 'recon' && data.mode === 'arp') {

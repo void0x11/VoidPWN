@@ -105,8 +105,23 @@
                         </div>
                     </div>
 
-                    <!-- TAB 3: ATTACK -->
                     <div id="tab-attack" class="tab-content">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>Nearby Networks (Scan Required)</h2>
+                                <button class="btn" id="wifi-refresh-btn" onclick="startWiFiScan()">REFRESH
+                                    NETWORKS</button>
+                            </div>
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:15px">
+                                Target networks below to enable Handshake and Evil Twin attacks.
+                            </div>
+                            <div id="nearby-wifi-list" class="device-list"
+                                style="height: 180px; overflow-y: auto; margin-bottom: 10px;">
+                                <div style="text-align:center; padding: 20px; color:var(--text-dim)">Click Refresh to
+                                    scan for APs</div>
+                            </div>
+                        </div>
+
                         <div class="panel">
                             <div class="panel-header">
                                 <h2>WiFi Attack Vectors</h2>

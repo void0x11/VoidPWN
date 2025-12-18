@@ -630,7 +630,7 @@ def start_scan():
             "15-second network scan started"
         )
         
-        return jsonify({'status': 'success', 'message': 'Scan started (15s)...'})
+        return jsonify({'status': 'success', 'message': 'Scan started', 'duration': 15})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -835,7 +835,7 @@ def action_crack():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/action/wifite')
+@app.route('/api/action/wifite', methods=['POST'])
 def action_wifite():
     """Launch automated Wifite attack"""
     log_file = gen_log_name("wifite")
