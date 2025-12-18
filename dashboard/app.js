@@ -268,9 +268,14 @@ async function runAction(action, data = {}) {
 
     // Determine target based on action type
     const wifiActions = ['deauth', 'evil_twin', 'handshake', 'pmkid', 'pixie', 'auth', 'wifite'];
-    const target = wifiActions.includes(action) ? wifiTarget : ipTarget;
+    let target = wifiActions.includes(action) ? wifiTarget : ipTarget;
 
-    if (action === 'recon' && !target) return alert("Select a Device Target!");
+    // Fallback to subnet CIDR for network-wide actions (recon)
+    if (!target && action === 'recon' && state.selectedNetwork) {
+        target = state.selectedNetwork.cidr;
+    }
+
+    if (action === 'recon' && !target) return alert("Select a Device or Subnet Target!");
     if (wifiActions.includes(action) && !target && !['pmkid', 'wifite', 'beacon', 'auth'].includes(action)) {
         return alert("Select a WiFi Network Target!");
     }
@@ -286,7 +291,15 @@ async function runAction(action, data = {}) {
 }
 
 async function runScenario(scenario) {
-    const target = state.selectedDevice ? state.selectedDevice.ip : null;
+    let target = state.selectedDevice ? state.selectedDevice.ip : null;
+
+    // Fallback to subnet if no device is selected
+    if (!target && state.selectedNetwork) {
+        target = state.selectedNetwork.cidr;
+    }
+
+    if (!target) return alert("Select a Device or Subnet Target!");
+
     log(`EXECUTING SCENARIO: ${scenario.toUpperCase()}...`);
 
     const res = await api(`/api/scenario/${scenario}`, 'POST', { target });
