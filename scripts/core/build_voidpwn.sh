@@ -8,7 +8,7 @@
 # Usage: sudo ./build_voidpwn.sh
 ################################################################################
 
-set -e
+# set -e # Removed for build resilience
 
 # Colors
 RED='\033[0;31m'
@@ -40,7 +40,7 @@ cat << "EOF"
     ╦  ╦┌─┐┬┌┬┐╔═╗╦ ╦╔╗╔
     ╚╗╔╝│ │││ ││╠═╝║║║║║║
      ╚╝ └─┘┴└─┘┴╩  ╚╩╝╝╚╝
-    MASTER BUILD ORCHESTRATOR v3.1
+    MASTER BUILD ORCHESTRATOR v3.2
 EOF
 echo -e "${NC}"
 
@@ -48,18 +48,35 @@ log_info "Starting the complete VoidPWN build process."
 log_info "This script unifies all legacy setup files into a single technical deployment."
 echo ""
 
+# --- Resilience Wrapper Functions ---
+# Critical install: Exit on failure
+install_critical() {
+    log_info "Installing CRITICAL: $1..."
+    apt install -y $2 || { log_error "Failed to install critical dependency: $1"; exit 1; }
+}
+
+# Non-critical install: Continue on failure
+install_tool_group() {
+    log_info "Installing $1..."
+    apt install -y $2 || log_warning "Some packages in '$1' failed. Skipping non-critical tools."
+}
+
+# Python Resilience: Continue on failure
+install_python_tool() {
+    log_info "Installing Python tool: $1..."
+    pip3 install $1 --break-system-packages || log_warning "Failed to install Python tool: $1. Skipping..."
+}
+
 # --- 1. System Foundation (CRITICAL) ---
 log_step "PHASE 1: System Baseline & Dependencies"
 log_info "Updating package lists..."
 apt update -y || log_warning "Apt update encountered issues. Continuing..."
 
-log_info "Installing core dependencies (X11, Chromium, Python, System utilities)..."
-# Critical dependencies use || exit 1 to ensure system baseline is met
-apt install -y \
+install_critical "Foundation (X11, Python, Utilities)" "\
     xserver-xorg x11-xserver-utils xinit xinput \
     matchbox-window-manager chromium unclutter \
     python3-flask python3-psutil python3-pip \
-    git wget curl iw pciutils net-tools || { log_error "Critical foundation tools failed!"; exit 1; }
+    git wget curl iw pciutils net-tools"
 log_success "Foundation ready."
 
 # --- 2. Security Toolchain (Consolidated) ---
@@ -86,8 +103,7 @@ install_tool_group "Reverse Engineering" "radare2 ghidra"
 install_tool_group "Mobile Analysis" "apktool dex2jar jadx"
 
 # Python Advanced
-log_info "Installing Python advanced packages (wifiphisher)..."
-pip3 install wifiphisher --break-system-packages || pip3 install wifiphisher
+install_python_tool "wifiphisher"
 
 # Fluxion
 if [ ! -d "/opt/fluxion" ]; then
