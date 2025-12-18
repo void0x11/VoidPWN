@@ -87,6 +87,13 @@ header {
     overflow: hidden;
 }
 
+.view-area {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+
 /* Navigation */
 nav {
     width: 70px;
@@ -154,12 +161,10 @@ main {
     display: grid;
     grid-template-columns: 1fr 200px;
     gap: 10px;
-    height: calc(100vh - 200px);
-    /* 100vh - header - footer */
 }
 
 .hud-footer {
-    height: 150px;
+    height: 180px;
     background: var(--panel-bg);
     border-top: 1px solid var(--border);
     padding: 5px 10px;

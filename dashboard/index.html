@@ -55,214 +55,224 @@
             </button>
         </nav>
 
-        <!-- Main Content Area -->
-        <main>
-            <div class="content-left">
+        <div class="view-area">
+            <!-- Main Content Area -->
+            <main>
+                <div class="content-left">
 
-                <!-- TAB 1: INTERFACES -->
-                <div id="tab-connect" class="tab-content active">
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>Active Interfaces</h2>
-                            <button class="btn" id="scan-wifi-btn" onclick="loadInterfaces()">REFRESH</button>
-                        </div>
-                        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:15px">
-                            Select an interface to immediately target its subnet. Use the DISCOVERY tab to find devices.
-                        </div>
-                        <div id="wifi-list" class="device-list" style="height: 320px; overflow-y: auto;">
-                            <!-- Interface list populated by JS -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- TAB 2: SCAN -->
-                <div id="tab-scan" class="tab-content">
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>Network Discovery</h2>
-                            <div style="display:flex; gap:10px;">
-                                <button class="btn" onclick="scanDevices('quick')">QUICK</button>
-                                <button class="btn" onclick="scanDevices('full')">DEEP</button>
+                    <!-- TAB 1: INTERFACES -->
+                    <div id="tab-connect" class="tab-content active">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>Active Interfaces</h2>
+                                <button class="btn" id="scan-wifi-btn" onclick="loadInterfaces()">REFRESH</button>
                             </div>
-                        </div>
-                        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:15px">
-                            Discovered devices populate the right sidebar inventory.
-                        </div>
-
-                        <div class="panel-header" style="margin-top:30px">
-                            <h2>Advanced Recon (Target Selection Required)</h2>
-                        </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                            <button class="btn" onclick="runAction('recon', {mode:'web'})">WEB ENUM</button>
-                            <button class="btn" onclick="runAction('recon', {mode:'smb'})">SMB ENUM</button>
-                            <button class="btn" onclick="runAction('recon', {mode:'dns'})">DNS ENUM</button>
-                            <button class="btn" onclick="runAction('recon', {mode:'arp'})">ARP SCAN</button>
-                            <button class="btn" onclick="runAction('recon', {mode:'comprehensive'})">FULL RECON</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- TAB 3: ATTACK -->
-                <div id="tab-attack" class="tab-content">
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>WiFi Attack Vectors</h2>
-                        </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-                            <button class="btn secondary" onclick="runAction('deauth')">DEAUTH</button>
-                            <button class="btn secondary" onclick="runAction('evil_twin')">EVIL TWIN</button>
-                            <button class="btn secondary" onclick="runAction('handshake')">HANDSHAKE</button>
-                            <button class="btn secondary" onclick="runAction('crack')">CRACK PASS</button>
-                            <button class="btn secondary" style="grid-column: span 2"
-                                onclick="runAction('wifite')">AUTO-PILOT (WIFITE)</button>
-                        </div>
-                    </div>
-
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>Advanced Modern Attacks</h2>
-                        </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                            <button class="btn" style="border-color:var(--accent); color:var(--accent)"
-                                onclick="runAction('pmkid')">PMKID SNIPER</button>
-                            <button class="btn" style="border-color:var(--accent); color:var(--accent)"
-                                onclick="runAction('pixie')">WPS PIXIE</button>
-                            <button class="btn" style="border-color:#ffcc00; color:#ffcc00"
-                                onclick="runAction('beacon')">BEACON CHAOS</button>
-                            <button class="btn" style="border-color:#ffcc00; color:#ffcc00"
-                                onclick="runAction('auth')">AUTH REBOOT</button>
-                        </div>
-                    </div>
-
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h2>Bandwidth Throttling</h2>
-                        </div>
-                        <div style="display:flex; gap:10px; align-items:center;">
-                            <select id="throttle-speed"
-                                style="background:var(--bg); color:var(--text); border:1px solid var(--border); padding:10px; border-radius:4px; flex:1">
-                                <option value="56kbit">56kbps (Dial-up)</option>
-                                <option value="256kbit">256kbps (Very Slow)</option>
-                                <option value="1mbit" selected>1mbps (Laggy)</option>
-                                <option value="5mbit">5mbps (Limit HD)</option>
-                            </select>
-                            <button class="btn"
-                                onclick="runAction('throttle', {speed: document.getElementById('throttle-speed').value})">START
-                                LIMIT</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- TAB 4: SCENARIOS -->
-                <div id="tab-scenarios" class="tab-content">
-                    <div class="scenario-grid">
-                        <div class="scenario-card" onclick="runScenario('wifi_audit')">
-                            <span class="material-icons scenario-icon" style="color:var(--primary)">security</span>
-                            <div class="scenario-title">WiFi Audit</div>
-                            <div class="scenario-desc">Scan, Capture, and Test WPS security on all nearby networks.
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:15px">
+                                Select an interface to immediately target its subnet. Use the DISCOVERY tab to find
+                                devices.
                             </div>
-                        </div>
-                        <div class="scenario-card" onclick="runScenario('network_sweep')">
-                            <span class="material-icons scenario-icon" style="color:var(--secondary)">searching</span>
-                            <div class="scenario-title">Net Sweep</div>
-                            <div class="scenario-desc">Full discovery of all hosts, open ports, and active services.
-                            </div>
-                        </div>
-                        <div class="scenario-card" onclick="runScenario('web_hunt')">
-                            <span class="material-icons scenario-icon" style="color:var(--accent)">language</span>
-                            <div class="scenario-title">Web Hunt</div>
-                            <div class="scenario-desc">Automatically find and enumerate every web server on the network.
-                            </div>
-                        </div>
-                        <div class="scenario-card" onclick="runScenario('stealth_recon')">
-                            <span class="material-icons scenario-icon"
-                                style="color:var(--primary)">visibility_off</span>
-                            <div class="scenario-title">Stealth</div>
-                            <div class="scenario-desc">Quiet SYN scanning with decoys to avoid IDA/IPS detection.</div>
-                        </div>
-                        <div class="scenario-card" onclick="runScenario('quick_check')">
-                            <span class="material-icons scenario-icon" style="color:var(--text)">speed</span>
-                            <div class="scenario-title">Quick Check</div>
-                            <div class="scenario-desc">Fast 5-minute assessment of critical network vulnerabilities.
+                            <div id="wifi-list" class="device-list" style="height: 320px; overflow-y: auto;">
+                                <!-- Interface list populated by JS -->
                             </div>
                         </div>
                     </div>
+
+                    <!-- TAB 2: SCAN -->
+                    <div id="tab-scan" class="tab-content">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>Network Discovery</h2>
+                                <div style="display:flex; gap:10px;">
+                                    <button class="btn" onclick="scanDevices('quick')">QUICK</button>
+                                    <button class="btn" onclick="scanDevices('full')">DEEP</button>
+                                </div>
+                            </div>
+                            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:15px">
+                                Discovered devices populate the right sidebar inventory.
+                            </div>
+
+                            <div class="panel-header" style="margin-top:30px">
+                                <h2>Advanced Recon (Target Selection Required)</h2>
+                            </div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                <button class="btn" onclick="runAction('recon', {mode:'web'})">WEB ENUM</button>
+                                <button class="btn" onclick="runAction('recon', {mode:'smb'})">SMB ENUM</button>
+                                <button class="btn" onclick="runAction('recon', {mode:'dns'})">DNS ENUM</button>
+                                <button class="btn" onclick="runAction('recon', {mode:'arp'})">ARP SCAN</button>
+                                <button class="btn" onclick="runAction('recon', {mode:'comprehensive'})">FULL
+                                    RECON</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: ATTACK -->
+                    <div id="tab-attack" class="tab-content">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>WiFi Attack Vectors</h2>
+                            </div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                                <button class="btn secondary" onclick="runAction('deauth')">DEAUTH</button>
+                                <button class="btn secondary" onclick="runAction('evil_twin')">EVIL TWIN</button>
+                                <button class="btn secondary" onclick="runAction('handshake')">HANDSHAKE</button>
+                                <button class="btn secondary" onclick="runAction('crack')">CRACK PASS</button>
+                                <button class="btn secondary" style="grid-column: span 2"
+                                    onclick="runAction('wifite')">AUTO-PILOT (WIFITE)</button>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>Advanced Modern Attacks</h2>
+                            </div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                <button class="btn" style="border-color:var(--accent); color:var(--accent)"
+                                    onclick="runAction('pmkid')">PMKID SNIPER</button>
+                                <button class="btn" style="border-color:var(--accent); color:var(--accent)"
+                                    onclick="runAction('pixie')">WPS PIXIE</button>
+                                <button class="btn" style="border-color:#ffcc00; color:#ffcc00"
+                                    onclick="runAction('beacon')">BEACON CHAOS</button>
+                                <button class="btn" style="border-color:#ffcc00; color:#ffcc00"
+                                    onclick="runAction('auth')">AUTH REBOOT</button>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>Bandwidth Throttling</h2>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="throttle-speed"
+                                    style="background:var(--bg); color:var(--text); border:1px solid var(--border); padding:10px; border-radius:4px; flex:1">
+                                    <option value="56kbit">56kbps (Dial-up)</option>
+                                    <option value="256kbit">256kbps (Very Slow)</option>
+                                    <option value="1mbit" selected>1mbps (Laggy)</option>
+                                    <option value="5mbit">5mbps (Limit HD)</option>
+                                </select>
+                                <button class="btn"
+                                    onclick="runAction('throttle', {speed: document.getElementById('throttle-speed').value})">START
+                                    LIMIT</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 4: SCENARIOS -->
+                    <div id="tab-scenarios" class="tab-content">
+                        <div class="scenario-grid">
+                            <div class="scenario-card" onclick="runScenario('wifi_audit')">
+                                <span class="material-icons scenario-icon" style="color:var(--primary)">security</span>
+                                <div class="scenario-title">WiFi Audit</div>
+                                <div class="scenario-desc">Scan, Capture, and Test WPS security on all nearby networks.
+                                </div>
+                            </div>
+                            <div class="scenario-card" onclick="runScenario('network_sweep')">
+                                <span class="material-icons scenario-icon"
+                                    style="color:var(--secondary)">searching</span>
+                                <div class="scenario-title">Net Sweep</div>
+                                <div class="scenario-desc">Full discovery of all hosts, open ports, and active services.
+                                </div>
+                            </div>
+                            <div class="scenario-card" onclick="runScenario('web_hunt')">
+                                <span class="material-icons scenario-icon" style="color:var(--accent)">language</span>
+                                <div class="scenario-title">Web Hunt</div>
+                                <div class="scenario-desc">Automatically find and enumerate every web server on the
+                                    network.
+                                </div>
+                            </div>
+                            <div class="scenario-card" onclick="runScenario('stealth_recon')">
+                                <span class="material-icons scenario-icon"
+                                    style="color:var(--primary)">visibility_off</span>
+                                <div class="scenario-title">Stealth</div>
+                                <div class="scenario-desc">Quiet SYN scanning with decoys to avoid IDA/IPS detection.
+                                </div>
+                            </div>
+                            <div class="scenario-card" onclick="runScenario('quick_check')">
+                                <span class="material-icons scenario-icon" style="color:var(--text)">speed</span>
+                                <div class="scenario-title">Quick Check</div>
+                                <div class="scenario-desc">Fast 5-minute assessment of critical network vulnerabilities.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 5: REPORTS -->
+                    <div id="tab-reports" class="tab-content">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>Operations Summary</h2>
+                            </div>
+                            <table style="width:100%; border-collapse: collapse; font-size:0.85rem">
+                                <thead
+                                    style="border-bottom: 2px solid var(--border); text-align: left; color:var(--text-dim)">
+                                    <tr>
+                                        <th style="padding:10px">TIME</th>
+                                        <th>TYPE</th>
+                                        <th>TARGET</th>
+                                        <th>STATUS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reports-body">
+                                    <!-- Data from JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- TAB 6: SYSTEM -->
+                    <div id="tab-system" class="tab-content">
+                        <div class="panel">
+                            <h2>Maintenance</h2>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:20px;">
+                                <button class="btn" onclick="runAction('reboot')">REBOOT</button>
+                                <button class="btn secondary" onclick="runAction('shutdown')">SHUTDOWN</button>
+                                <button class="btn" style="grid-column: span 2"
+                                    onclick="runAction('restore_hdmi')">SWITCH
+                                    TO HDMI (DISPLAY FIX)</button>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
-                <!-- TAB 5: REPORTS -->
-                <div id="tab-reports" class="tab-content">
-                    <div class="panel">
+                <!-- Right Sidebar: Device Inventory -->
+                <div class="sidebar">
+                    <div class="panel" style="flex: 1; display:flex; flex-direction:column; margin-bottom: 0;">
                         <div class="panel-header">
-                            <h2>Operations Summary</h2>
+                            <h2>Inventory</h2>
+                            <button class="btn" style="padding:4px 8px; font-size:0.6rem"
+                                onclick="api('/api/devices/clear', 'POST').then(loadDeviceList)">CLEAR</button>
                         </div>
-                        <table style="width:100%; border-collapse: collapse; font-size:0.85rem">
-                            <thead
-                                style="border-bottom: 2px solid var(--border); text-align: left; color:var(--text-dim)">
-                                <tr>
-                                    <th style="padding:10px">TIME</th>
-                                    <th>TYPE</th>
-                                    <th>TARGET</th>
-                                    <th>STATUS</th>
-                                </tr>
-                            </thead>
-                            <tbody id="reports-body">
-                                <!-- Data from JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- TAB 6: SYSTEM -->
-                <div id="tab-system" class="tab-content">
-                    <div class="panel">
-                        <h2>Maintenance</h2>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:20px;">
-                            <button class="btn" onclick="runAction('reboot')">REBOOT</button>
-                            <button class="btn secondary" onclick="runAction('shutdown')">SHUTDOWN</button>
-                            <button class="btn" style="grid-column: span 2" onclick="runAction('restore_hdmi')">SWITCH
-                                TO HDMI (DISPLAY FIX)</button>
+                        <div id="inventory-list" class="device-list" style="flex:1; overflow-y:auto">
+                            <!-- Devices from JS -->
+                        </div>
+                        <div id="active-target-display"
+                            style="margin-top:15px; border-top: 1px solid var(--border); padding-top:15px; display:none">
+                            <div class="stat-label" style="font-size:0.7rem">ACTIVE TARGET:</div>
+                            <div class="active-target-badge"
+                                style="font-family:var(--font-mono); color:var(--secondary); font-size:0.8rem">NONE
+                                SELECTED
+                            </div>
                         </div>
                     </div>
                 </div>
+            </main>
 
-            </div>
-
-            <!-- Right Sidebar: Device Inventory -->
-            <div class="sidebar">
-                <div class="panel" style="flex: 1; display:flex; flex-direction:column; margin-bottom: 0;">
-                    <div class="panel-header">
-                        <h2>Inventory</h2>
-                        <button class="btn" style="padding:4px 8px; font-size:0.6rem"
-                            onclick="api('/api/devices/clear', 'POST').then(loadDeviceList)">CLEAR</button>
+            <!-- Real-time HUD Log (Bottom) -->
+            <footer class="hud-footer">
+                <div class="panel" style="height: 100%; margin: 0; display:flex; flex-direction:column">
+                    <div class="panel-header" style="margin-bottom: 5px; padding: 0 10px;">
+                        <h2 style="font-size: 0.8rem;"><span class="material-icons"
+                                style="font-size: 1rem;">terminal</span>
+                            LIVE HUD</h2>
+                        <div style="font-size: 0.6rem; color: var(--text-dim)">Streaming CLI Output...</div>
                     </div>
-                    <div id="inventory-list" class="device-list" style="flex:1; overflow-y:auto">
-                        <!-- Devices from JS -->
-                    </div>
-                    <div id="active-target-display"
-                        style="margin-top:15px; border-top: 1px solid var(--border); padding-top:15px; display:none">
-                        <div class="stat-label" style="font-size:0.7rem">ACTIVE TARGET:</div>
-                        <div class="active-target-badge"
-                            style="font-family:var(--font-mono); color:var(--secondary); font-size:0.8rem">NONE SELECTED
-                        </div>
+                    <div id="attack-log" class="log-container"
+                        style="flex:1; border-top: 1px solid var(--border); padding: 5px 10px;">
+                        <!-- Logs here -->
                     </div>
                 </div>
-            </div>
-        </main>
-
-        <!-- Real-time HUD Log (Bottom) -->
-        <footer class="hud-footer">
-            <div class="panel" style="height: 100%; margin: 0; display:flex; flex-direction:column">
-                <div class="panel-header" style="margin-bottom: 5px; padding: 0 10px;">
-                    <h2 style="font-size: 0.8rem;"><span class="material-icons" style="font-size: 1rem;">terminal</span>
-                        LIVE HUD</h2>
-                    <div style="font-size: 0.6rem; color: var(--text-dim)">Streaming CLI Output...</div>
-                </div>
-                <div id="attack-log" class="log-container"
-                    style="flex:1; border-top: 1px solid var(--border); padding: 5px 10px;">
-                    <!-- Logs here -->
-                </div>
-            </div>
-        </footer>
+            </footer>
+        </div>
     </div>
 
     <!-- Virtual Keyboard -->
