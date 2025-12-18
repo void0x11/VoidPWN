@@ -581,11 +581,6 @@ def select_target():
     CURRENT_TARGET = data
     return jsonify({'status': 'success', 'target': CURRENT_TARGET})
 
-@app.route('/api/reports')
-def get_reports():
-    """Get all reports"""
-    return jsonify({'reports': reporter.get_all()})
-
 @app.route('/api/logs/live')
 def get_live_logs():
     """Get the latest logs for the HUD"""
