@@ -71,6 +71,7 @@ show_menu() {
     echo -e "  ${CYAN}[7]${NC} System Tools"
     echo -e "  ${CYAN}[8]${NC} View Captures"
     echo -e "  ${CYAN}[9]${NC} Web Dashboard"
+    echo -e "  ${CYAN}[T]${NC} Run Diagnostics"
     echo -e "  ${CYAN}[0]${NC} Exit"
     echo ""
 }
@@ -429,6 +430,69 @@ view_captures() {
     read -p "Press Enter to continue..."
 }
 
+# System Diagnostics
+run_diagnostics() {
+    print_banner
+    echo -e "${YELLOW}╔════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║        System Diagnostics          ║${NC}"
+    echo -e "${YELLOW}╚════════════════════════════════════╝${NC}"
+    echo ""
+
+    # 1. Dependency Check
+    echo -e "${CYAN}[*] Checking Dependencies...${NC}"
+    local tools=("nmap" "aircrack-ng" "wifite" "python3" "iwconfig")
+    local missing=0
+    for tool in "${tools[@]}"; do
+        if command -v $tool &> /dev/null; then
+             echo -e "  [${GREEN}OK${NC}] $tool"
+        else
+             echo -e "  [${RED}FAIL${NC}] $tool not found"
+             missing=1
+        fi
+    done
+
+    # 2. Interface Check
+    echo ""
+    echo -e "${CYAN}[*] Checking Network Interfaces...${NC}"
+    if iwconfig 2>/dev/null | grep -q "monitor"; then
+         echo -e "  [${YELLOW}WARN${NC}] One or more interfaces in Monitor Mode"
+    fi
+
+    # Check for external adapter (heuristic: often wlan1)
+    if iwconfig 2>/dev/null | grep -q "wlan1"; then
+         echo -e "  [${GREEN}OK${NC}] External Adapter (wlan1) detected"
+    elif iwconfig 2>/dev/null | grep -q "wlan0"; then
+         echo -e "  [${YELLOW}INFO${NC}] Only internal WiFi (wlan0) detected"
+    else
+         echo -e "  [${RED}FAIL${NC}] No wireless interfaces found!"
+    fi
+
+    # 3. Service Status
+    echo ""
+    echo -e "${CYAN}[*] Checking Services...${NC}"
+    if systemctl is-active --quiet voidpwn.service; then
+         echo -e "  [${GREEN}OK${NC}] Dashboard Service (voidpwn.service) is RUNNING"
+         echo -e "       URL: http://$(hostname -I | awk '{print $1}'):5000"
+    else
+         echo -e "  [${RED}FAIL${NC}] Dashboard Service is STOPPED"
+         echo -e "       Try: sudo systemctl start voidpwn.service"
+    fi
+
+    # 4. Connectivity
+    echo ""
+    echo -e "${CYAN}[*] Checking Internet...${NC}"
+    if ping -c 1 8.8.8.8 &> /dev/null; then
+         echo -e "  [${GREEN}OK${NC}] Internet Connected"
+    else
+         echo -e "  [${RED}FAIL${NC}] No Internet Connection"
+    fi
+    
+    echo ""
+    echo -e "${MAGENTA}Diagnostics Complete.${NC}"
+    echo ""
+    read -p "Press Enter to return to menu..."
+}
+
 # Main loop
 main() {
     while true; do
@@ -448,6 +512,7 @@ main() {
             7) system_menu ;;
             8) view_captures ;;
             9) dashboard_menu ;;
+            t|T) run_diagnostics ;;
             0) 
                 echo -e "${CYAN}Exiting VoidPWN...${NC}"
                 exit 0
