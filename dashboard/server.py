@@ -179,12 +179,18 @@ def get_system_info():
     """Get system information"""
     try:
         # Get IP address
-        ip_result = subprocess.run(['hostname', '-I'], capture_output=True, text=True)
-        ip = ip_result.stdout.strip().split()[0] if ip_result.stdout else 'N/A'
+        try:
+            ip_result = subprocess.run(['hostname', '-I'], capture_output=True, text=True, timeout=2)
+            ip = ip_result.stdout.strip().split()[0] if ip_result.stdout else 'N/A'
+        except:
+            ip = 'N/A'
         
         # Get uptime
-        uptime_result = subprocess.run(['uptime', '-p'], capture_output=True, text=True)
-        uptime = uptime_result.stdout.strip().replace('up ', '') if uptime_result.stdout else 'N/A'
+        try:
+            uptime_result = subprocess.run(['uptime', '-p'], capture_output=True, text=True, timeout=2)
+            uptime = uptime_result.stdout.strip().replace('up ', '') if uptime_result.stdout else 'N/A'
+        except:
+            uptime = 'N/A'
         
         # Get temperature
         try:
