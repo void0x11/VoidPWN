@@ -146,17 +146,46 @@ Choose from menu:
 5. Reverse engineering tools
 6. Mobile analysis tools
 
-### 6. LAST STEP: Install LCD (Optional)
-
-WARNING: Only after everything else works!
+### 6. Install LCD Display (Required for Touch)
+**WARNING:** This step will reboot your Pi and switch output from HDMI to the LCD.
 
 ```bash
 sudo ./scripts/core/install_lcd.sh
 ```
 
-System will reboot and output will switch to LCD.
+### 7. Enable Touch Screen Interface (Kiosk Mode)
+This configures the Pi to auto-login and launch the VoidPWN Dashboard control panel on boot.
+
+```bash
+sudo ./scripts/core/setup_kiosk.sh
+```
+
+### 8. Final Reboot
+Reboot to apply all changes and launch the interface.
+
+```bash
+sudo reboot
+```
 
 ---
+
+## Post-Installation Verification
+
+1. **Display:** The 3.5" screen should show the VoidPWN Dashboard.
+2. **Touch:** You should be able to tap buttons (e.g., "REFRESH ALL").
+3. **WiFi:** The dashboard should show "ADAPTER: DETECTED".
+
+---
+
+## Switching Display Modes
+
+### Switch to HDMI (Desktop/CLI)
+If you need to use a monitor or diagnose issues:
+1. Tap **SWITCH TO HDMI** on the Dashboard Control Panel.
+2. OR run via SSH: `sudo ./scripts/core/restore_hdmi.sh`
+
+### Switch back to LCD
+Run the installer again: `sudo ./scripts/core/install_lcd.sh`
 
 ## Testing Your Setup
 
