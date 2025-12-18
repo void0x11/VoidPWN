@@ -13,6 +13,8 @@ import json
 import csv
 from datetime import datetime
 import re
+import urllib.request
+import urllib.parse
 
 try:
     import psutil
@@ -586,6 +588,44 @@ def view_full_log(filename):
         with open(log_path, 'r') as f:
             return jsonify({'content': f.read()})
     return jsonify({'error': 'Log file not found'}), 404
+
+@app.route('/api/ai/analyze', methods=['POST'])
+def ai_analyze_report():
+    """Generate an AI summary of a mission log using a free provider"""
+    data = request.get_json()
+    log_content = data.get('content', '')
+    if not log_content:
+        return jsonify({'summary': 'No intelligence data found in mission logs.'})
+    
+    # Truncate log to keep it within reasonable limits for a free API
+    max_chars = 3500
+    if len(log_content) > max_chars:
+        # Take beginning and end for context
+        log_content = log_content[:2000] + "\n\n[...SYSTEM OMITTED MID-LOG DATA...]\n\n" + log_content[-1500:]
+
+    prompt = (
+        "Role: VoidAI Cyber-Tactical Assistant. Task: Analyze raw mission logs. "
+        "Format: HTML-friendly Markdown. Sections: MISSION SUMMARY, ASSETS DISCOVERED, THREAT VECTOR ANALYSIS, RECOMMENDED EXPLOIT/RECON STEPS. "
+        "Tone: Professional, high-tech, slightly futuristic/hacker aesthetic. "
+        "LOG DATA:\n" + log_content
+    )
+    
+    try:
+        # Using Pollinations.ai free text endpoint (Open-Source access)
+        # It accepts any text as path and returns AI response
+        encoded_prompt = urllib.parse.quote(prompt)
+        url = f"https://text.pollinations.ai/{encoded_prompt}"
+        
+        # We can also add model hints if supported, e.g. ?model=openai
+        with urllib.request.urlopen(url, timeout=45) as response:
+            summary = response.read().decode('utf-8')
+            return jsonify({'summary': summary})
+    except Exception as e:
+        print(f"VoidAI Error: {e}")
+        return jsonify({
+            'error': str(e), 
+            'summary': "⚠️ **TACTICAL NETWORK ERROR**: Could not reach VoidNet Intelligence Hub. Ensure internet connectivity is active for AI processing."
+        }), 500
 
 @app.route('/api/target/current')
 def get_target():

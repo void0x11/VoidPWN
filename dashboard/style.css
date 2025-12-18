@@ -12,6 +12,36 @@
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.rotating {
+    animation: spin 2s linear infinite;
+    display: inline-block;
+}
+
+#ai-summary-content {
+    font-family: 'Inter', sans-serif;
+    color: var(--text);
+}
+
+#ai-summary-content h4 {
+    border-bottom: 1px solid var(--secondary);
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    color: var(--secondary);
+}
+
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Inter:wght@300;400;700&display=swap');
 
 * {
@@ -224,12 +254,17 @@ h2 {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    height: 100%;
+    overflow: hidden;
 }
 
 .device-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 5px;
 }
 
 .device-card {
@@ -389,7 +424,8 @@ input:focus {
     font-family: var(--font-mono);
     font-size: 0.75rem;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
+    /* Normal terminal flow */
 }
 
 .log-entry {

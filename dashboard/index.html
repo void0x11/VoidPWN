@@ -357,7 +357,20 @@
         <div class="modal" style="max-width: 90%; width: 1000px; height: 80vh; display: flex; flex-direction: column;">
             <div class="panel-header" style="margin-bottom: 15px;">
                 <h2 id="log-viewer-title" style="font-size:0.9rem">MISSION LOG</h2>
-                <button class="btn" style="padding:5px 10px; font-size:0.7rem" onclick="closeLogViewer()">CLOSE</button>
+                <div style="display:flex; gap:10px">
+                    <button id="ai-analyze-btn" class="btn secondary"
+                        style="padding:5px 15px; font-size:0.75rem; border-color:#ff00ff"
+                        onclick="analyzeWithAI()">VOIDAI ANALYZE</button>
+                    <button class="btn" style="padding:5px 10px; font-size:0.7rem;"
+                        onclick="closeLogViewer()">CLOSE</button>
+                </div>
+            </div>
+            <div id="ai-summary-box"
+                style="display:none; margin-bottom:15px; background:rgba(255,0,255,0.05); border:1px solid var(--secondary); padding:15px; border-radius:4px; font-size:0.85rem; line-height:1.4">
+                <div
+                    style="color:var(--secondary); font-weight:bold; margin-bottom:8px; font-family:var(--font-mono); font-size:0.7rem">
+                    VOIDAI INTELLIGENCE REPORT:</div>
+                <div id="ai-summary-content"></div>
             </div>
             <pre id="log-viewer-content"
                 style="flex:1; overflow-y:auto; background:rgba(0,0,0,0.5); padding:15px; font-family:var(--font-mono); font-size:0.8rem; color:#0e9; border:1px solid var(--border); border-radius:4px;"></pre>
