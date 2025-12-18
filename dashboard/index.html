@@ -490,9 +490,27 @@
 
         // 2. Scan & Target
         async function startScan() {
-            log("Starting 15s scan...");
-            await api('/api/scan/start');
-            setTimeout(loadScanResults, 15000); // Reload after 15s
+            try {
+                log("Starting 15s WiFi scan...");
+                const res = await api('/api/scan/start');
+
+                if (res.error) {
+                    log(`ERROR: ${res.error}`);
+                    alert(`Scan Error: ${res.error}`);
+                    return;
+                }
+
+                if (res.status === 'success') {
+                    log("✓ Scan started successfully");
+                    log("Waiting 15 seconds for results...");
+                    setTimeout(loadScanResults, 15000);
+                } else {
+                    log("WARNING: Unexpected response from server");
+                }
+            } catch (err) {
+                log(`ERROR: ${err.message}`);
+                alert(`Failed to start scan: ${err.message}`);
+            }
         }
 
         async function loadScanResults() {
@@ -542,11 +560,33 @@
         }
 
         async function runRecon(mode) {
-            const target = document.getElementById('recon-target').value;
-            if (!target) return alert("Enter Target IP");
-            log(`Starting ${mode} scan on ${target}...`);
-            const res = await api('/api/action/recon', 'POST', { target, mode });
-            if (res.message) log(res.message);
+            try {
+                const target = document.getElementById('recon-target').value;
+                if (!target) {
+                    alert("Enter Target IP");
+                    log("ERROR: No target IP specified");
+                    return;
+                }
+
+                log(`Starting ${mode.toUpperCase()} scan on ${target}...`);
+                const res = await api('/api/action/recon', 'POST', { target, mode });
+
+                if (res.error) {
+                    log(`ERROR: ${res.error}`);
+                    alert(`Recon Error: ${res.error}`);
+                    return;
+                }
+
+                if (res.status === 'success') {
+                    log(`✓ ${mode.toUpperCase()} scan started on ${target}`);
+                    log("Check REPORTS tab for results");
+                } else if (res.message) {
+                    log(res.message);
+                }
+            } catch (err) {
+                log(`ERROR: ${err.message}`);
+                alert(`Failed to start recon: ${err.message}`);
+            }
         }
 
         async function stopMonitor() {
