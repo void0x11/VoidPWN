@@ -1,67 +1,79 @@
-# 📖 VoidPWN Operative's Guide
+# 📖 VoidPWN Operative's Reference (Technical Deep Dive)
 
-Welcome, Operative. This guide will walk you through your first mission with VoidPWN, from setup to final reports.
-
-## 🧭 Navigating the HUD
-
-The VoidPWN interface is divided into 6 Tactical Tabs:
-
-### 1. **CONNECT (WiFi Liaison)**
-- **Purpose**: Bridge the gap between the Pi and the outside world.
-- **Workflow**: 
-    1. Click **SCAN** to see neighboring APs.
-    2. Click an entry to select it.
-    3. Tap the **PASSWORD** field; the virtual keyboard will rise.
-    4. Type your password and hit **CONNECT**.
-
-### 2. **RADAR (Discovery)**
-- **Purpose**: Build your target inventory.
-- **Quick Scan**: Fast ARP scan to find active IPs.
-- **Deep Scan**: Thorough Nmap version detection (takes 2-5 minutes).
-- **Details**: Clicking **DETAILS** on a device card shows open ports and allows you to add custom **Notes** (e.g., "HR Admin Laptop") and **Tags** (e.g., "Vulnerable", "High Value").
-
-### 3. **ATTACK (The Arsenal)**
-- **Standard Panel**: Deauth, Evil Twin, and Handshake captures.
-- **Advanced Panel**:
-    - **PMKID Sniper**: Use this for clientless networks.
-    - **WPS Pixie**: Use this on networks with WPS Enabled.
-- **Throttle**: Select a device IP, choose a speed (like 56kbit), and hit **START LIMIT**. Watch as their internet slows to a crawl.
-
-### 4. **SCENARIOS (Auto-Pilot)**
-- **Stealth Recon**: Ideal for bypassing modern intrusion detection.
-- **Web Hunt**: Automatically finds all `http(s)` services and runs directory discovery.
-- **WiFi Audit**: The "One Button Hack" – scans, captures handshakes, and tries WPS automatically.
-
-### 5. **REPORTS (The Logbook)**
-Every action you take is logged here with a timestamp. This is your source of truth for post-operation documentation. Click any column to sort by time or type.
-
-### 6. **SYSTEM (Core Control)**
-Manage the Pi's power states and display. If you accidentally lose your desktop environment on the TFT, use **SWITCH TO HDMI** to restore the display.
+This document provides the binary-level technical breakdown of the VoidPWN platform. It is intended for operatives who need to know exactly what is happening "under the hood."
 
 ---
 
-## 🛠️ Common Operations Walkthrough
+## 📡 Scanning & Intelligence
 
-### Scenario A: Obtaining a WPA2 Password (Clientless)
-1. Go to **ATTACK**.
-2. Select your target WiFi network in the right sidebar (Network Target).
-3. Click **PMKID SNIPER**.
-4. Wait for the capture to finish (default 300s).
-5. Convert the resulting `.pcapng` in the `output/captures` folder to a hash and crack it!
+### 1. RADAR - Network Scanning
+The RADAR tab executes `scripts/network/recon.sh` using the following technical implementations:
 
-### Scenario B: Identifying a High-Value Target
-1. Run a **DEEP SCAN** in the **RADAR** tab.
-2. Review the **DETAILS** of each device in the sidebar.
-3. Look for "PORT 3389" (RDP) or "PORT 8080" (Admin Panels).
-4. Tag these devices as **"HIGH VALUE"**.
-5. Switch to the **RECON** tab and run a **VULN SCAN** specifically on those IPs.
+- **Quick Scan**:
+  - `nmap -sn <target>`
+  - Performs a Ping Sweep to detect live hosts without scanning ports.
+- **Deep Scan**:
+  - `nmap -sV -sC -O -A -p- <target>`
+  - Enters the "No Holds Barred" mode: Version detection (`-sV`), Default scripts (`-sC`), OS detection (`-O`), Aggressive mode (`-A`), and scanning ALL 65,535 ports (`-p-`).
+- **Target Logic**:
+  - Discovered hosts are stored in `output/devices.json` with metadata.
+  - The dashboard dynamically parses Nmap XML output to extract service banners and port numbers.
+
+### 2. Reconnaissance Modes
+- **Stealth Mode**: `nmap -sS -T2 -f -D RND:10`
+  - Uses SYN stealth scanning (`-sS`), Slow "Sneaky" timing (`-T2`), Packet fragmentation (`-f`), and 10 random Decoy IPs (`-D`) to evade Firewalls/IDS.
+- **Vulnerability Mode**: `nmap --script vuln`
+  - Executes the Nmap Scripting Engine (NSE) vulnerability category.
+- **Web Enumeration**: `gobuster dir -u <url> -w dirb_common.txt -x php,html,txt,js`
+  - Automated directory fuzzing identifying hidden web structures.
 
 ---
 
-## 🛑 Safety Protocols
+## 🎯 Tactical Artillery
 
-- **Monitor Mode**: Some tools will automatically put your interface into monitor mode. If your internet stops working, check the **SYSTEM** tab to ensure monitor mode is toggled off when finished.
-- **Sudo Permissions**: Always run the server with `sudo` to ensure it has raw packet access.
+### 1. WiFi Attack Vectors
+The ATTACK tab executes `scripts/network/wifi_tools.sh` using primary tools from the Aircrack-ng and Modern suites:
+
+- **Deauth Attack**: `aireplay-ng --deauth 0 -a <BSSID>`
+  - Sends death packets to force target disconnects. 
+- **WPA Handshake**: `airodump-ng -c <ch> --bssid <BSSID> -w <output>`
+  - Listens for EAPOL frames during a client reconnection.
+- **PMKID Sniper**: `hcxdumptool -o <output> -i <iface> --enable_status=1`
+  - Leverages the RSN IE (Robust Security Network Information Element) to capture master keys without a connected client.
+- **WPS Pixie**: `reaver -i <iface> -b <BSSID> -K 1 -vv`
+  - Online/Offline brute force using the Pixie-Dust entropy attack.
+
+### 2. Chaotic Neutral (MDK4)
+- **Beacon Flood**: `mdk4 <iface> b`
+  - Rapidly broadcasts beacons for nonexistent SSIDs to saturate the area Spectrum.
+- **Auth Flood**: `mdk4 <iface> a -a <BSSID>`
+  - Floods an AP with randomized authentication frames to overflow its client table.
 
 ---
-*Good luck, Operative. The Void is waiting.*
+
+## ✨ Automated Scenarios
+
+Scenarios are orchestrated by `scripts/network/scenarios.sh`.
+
+### WiFi Audit
+1. **Monitor Mode**: Toggles interface to `monitor` state.
+2. **Recon Phase**: 10min `airodump-ng` sweep to identify target rich environment.
+3. **Capture Phase**: Sequential handshake attempts on all top-signal WPA2 networks.
+4. **WPS Phase**: `wash` scan followed by targeted `reaver` sessions on vulnerable pins.
+
+### Web Application Hunt
+1. **Discovery**: Scans network for ports `80, 443, 8080, 8443`.
+2. **Fingerprinting**: Executes `whatweb` to identify CMS (WordPress, Joomla, etc.).
+3. **Fuzzing**: Parallel `gobuster` sessions on every identified host.
+4. **Vuln Check**: Targeted `nikto` and `sqlmap` (batch mode) for critical web flaws.
+
+---
+
+## ⚙️ System Forensics
+
+- **Dashboard Backend**: Lightweight Python Flask server (`server.py`) handling asynchronous `subprocess.Popen` calls for non-blocking UI.
+- **Reporting Manager**: Custom Python class that catches script `stdout/stderr` and translates them into the JSON format displayed in the **REPORTS** tab.
+- **Device Management**: Advanced `TargetSelection` logic that differentiates between IP (Layer 3) and BSSID (Layer 2) targets depending on the tool selected.
+
+---
+*End of Operational Reference.*
