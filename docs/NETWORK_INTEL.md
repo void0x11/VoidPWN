@@ -1,60 +1,54 @@
-# 🛡️ Network Intelligence & Recon Tutorial
+# Network Reconnaissance Guide
 
-This module explains how VoidPWN discovers, identifies, and catalogues devices on a network. 
-
-## 🛰️ The Reconnaissance Pipeline
-
-VoidPWN follows a professional 3-stage intelligence gathering process:
-
-```mermaid
-graph LR
-    A[Host Discovery] --> B[Service Fingerprinting]
-    B --> C[Vulnerability Analysis]
-    C --> D[Intelligence Storage]
-```
-
-### Stage 1: Host Discovery (RADAR)
-Before we can attack, we must know what is alive.
-*   **Protocol**: ARP & ICMP Echo (Ping).
-*   **Nmap Flag**: `-sn` (No Port Scan).
-*   **Objective**: Find IP and MAC addresses in the subnet without alerting software-based firewalls.
-
-### Stage 2: Service Fingerprinting (DEEP SCAN)
-Once a host is selected, we perform deep inspection.
-*   **Tool**: `nmap`
-*   **Primary Flags**: `-sV -sC -O -A`
-    *   `-sV`: Service version detection (e.g., Apache 2.4.41).
-    *   `-sC`: Default script scanning (identifies common defaults).
-    *   `-O`: OS Fingerprinting (identifies Linux vs Windows vs IoT).
-    *   `-A`: Aggressive mode (combines the above for high detail).
-*   **Objective**: Identify the "Attack Surface".
-
-### Stage 3: Vulnerability Analysis (STEALTH/VULN)
-*   **Stealth**: `nmap -sS -T2 -f -D RND:10`
-    *   `T2`: Slow timing to avoid rate-limiting.
-    *   `-f`: Fragmented packets to slip through simple firewalls.
-    *   `-D`: Uses Decoy IPs to mask the Pi's true identity.
-*   **Vuln**: `nmap --script vuln`
-    *   Checks the host against the **Nmap Scripting Engine (NSE)** database for known CVEs.
+This document provides technical guidance on the network discovery and reconnaissance capabilities of VoidPWN, focusing on Layer 3 and Layer 4 scanning methodologies.
 
 ---
 
-## 📊 Technical Reference Table
+## Technical Methodology
 
-| Scan Mode | Dash Tab | CLI Flag Equivalent | Tutorial Use Case |
-| :--- | :--- | :--- | :--- |
-| **Quick Scan** | RADAR | `nmap -sn` | Initial entry into a network. Fast. |
-| **Deep Scan** | RADAR/RECON | `nmap -sV -sC -O -A` | Full intel gathering on a target. |
-| **Stealth** | RECON | `nmap -sS -T2 -f` | Bypassing IDS/IPS detection. |
-| **Vuln** | RECON | `nmap --script vuln` | Identifying low-hanging exploits. |
+Network reconnaissance in VoidPWN is structured into a logical pipeline that prioritizes discovery, identification, and vulnerability assessment.
+
+### 1. Host Discovery
+The primary objective of host discovery is to identify active devices within a target subnet while minimizing network traffic and detection risk.
+*   **Mechanism**: ARP-based discovery for local subnets and ICMP echo requests (ping) for routed networks.
+*   **Implementation**: `nmap -sn`. This mode suppresses port scanning, focusing solely on host presence.
+*   **Platform Integration**: The **QUICK SCAN** feature in the dashboard automates this process, populating the device inventory with detected IP and MAC addresses.
+
+### 2. Service and OS Fingerprinting
+Once hosts are identified, deeper inspection is conducted to determine the host's attack surface.
+*   **Service Detection**: Version scanning (`-sV`) queries open ports for service-specific banners and response patterns to identify software versions (e.g., Apache 2.4.x).
+*   **OS Detection**: Analyzing micro-behaviors in the TCP/IP stack (e.g., TTL, IP ID sequences, TCP window sizes) to identify the underlying operating system.
+*   **Tools**: `nmap`.
+
+### 3. Vulnerability Identification
+Cross-referencing identified services against known vulnerability databases and execution of targeted security scripts.
+*   **Implementation**: Utilization of the **Nmap Scripting Engine (NSE)** with the `vuln` script category to identify common misconfigurations and documented CVEs.
 
 ---
 
-## 💡 Operative's Tip: Parsing Results
-When a scan finishes, VoidPWN parses the `.xml` output into the **Details Modal**. 
-- **Green Ports (80, 443, 8080)**: Web servers. Highly exploitable.
-- **Blue Ports (22, 23)**: Remote access. Critical targets.
-- **Port 445**: SMB. Target these for internal network pivoting.
+## Stealth Scanning Strategies
+
+VoidPWN provides specialized scanning profiles for assessments in monitored environments where detection must be minimized.
+
+### SYN Stealth Scanning
+The SYN scan (`-sS`) is the default privileged scan method. 
+*   **Technique**: Sends a SYN packet and waits for a SYN/ACK. Upon receipt, it immediately sends a RST packet to terminate the connection before the 3-way handshake is completed.
+*   **Benefit**: This prevents the connection from being recorded by application-level logs that only trigger on established sessions.
+
+### Packet Fragmentation and Decoys
+*   **Fragmentation (`-f`)**: Splits the TCP header across multiple small packets to complicate packet inspection by simple stateless firewalls.
+*   **Decoys (`-D`)**: Includes multiple spoofed "Decoy" IP addresses in the scan. The target's Intrusion Detection System (IDS) will report simultaneous scans from all decoy addresses, obscuring the platform's actual IP address.
 
 ---
-*Next: [WIFI_ARSENAL.md](./WIFI_ARSENAL.md) for wireless operations.*
+
+## Tool Reference
+
+| Profile | Core Command | Primary Objective |
+| :--- | :--- | :--- |
+| **Discovery** | `nmap -sn` | Map active hosts in subnet |
+| **Full Recon** | `nmap -sV -sC -O` | Detailed service and OS mapping |
+| **Stealth Scan** | `nmap -sS -T2 -f` | Evasive reconnaissance |
+| **Vuln Audit** | `nmap --script vuln` | Automated CVE identification |
+
+---
+*For a comprehensive theoretical analysis, refer to the [Attack and Feature Reference](./ATTACK_REFERENCE.md).*

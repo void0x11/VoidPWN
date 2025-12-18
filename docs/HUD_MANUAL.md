@@ -31,44 +31,58 @@ The Connect tab manages the Pi's physical network state.
 - **Connection**: Handles WPA2-Personal/Enterprise credentials.
 - **Virtual Keyboard**: Activates for data entry on touch-only TFT screens.
 
-### 2. **RADAR** (Spectrum Intelligence)
-The Radar tab is where targets are born. 
-- **Inventory List**: Shows every discovered device.
-- **Target Selection**: Clicking a device makes it the **Active Target** for all other tools.
-- **Details Modal**:
-    - **Ports**: Shows open TCP/UDP ports discovered via Nmap.
-    - **Intelligence**: Allows for persistent notes (e.g., "Main Server") and color-coded tags.
+# System Interface Manual
 
-### 3. **ATTACK** (The Arsenal)
-The heart of the pentesting console.
-- **BSSID Targets**: WiFi attacks (Deauth, PMKID, MDK4) automatically target the network selected in the sidebar.
-- **IP Targets**: Network attacks (Throttling, Recon) target the host selected in the inventory.
-- **Chaos Mode**: Direct controls for `mdk4` modules.
-
-### 4. **SCENARIOS** (Tactical Automation)
-Chained sequences that automate 10-20 manual steps into one button.
-- **Tutorial Logic**: Scenarios use a "Sequence of Events" (SoE) to handle tool dependencies (e.g., stopping scan before starting deauth).
-
-### 5. **REPORTS** (Intelligence Feed)
-A real-time, persistent log of every shell command executed.
-- **Success/Warning/Critical**: Every API response is color-coded for quick review.
-- **Persistence**: Results are saved even after page refresh.
-
-### 6. **SYSTEM** (Hardware Control)
-Kernel-level controls for the Raspberry Pi hardware.
-- **Power**: ACPI shutdown/reboot controls.
-- **Monitor Mode**: Toggles `airmon-ng` on/off for selected interfaces.
-- **LCD/HDMI**: Switches the frame buffer for different displays.
+This manual provides a technical overview of the VoidPWN Head-Up Display (HUD), the primary web-based management console for the platform.
 
 ---
 
-## 🎯 Tutorial: The Global Target Workflow
+## Technical Architecture
 
-1.  **Scan** in the Radar tab.
-2.  **Toggle Details** on a target device.
-3.  **Click TARGET** to lock it in. Notice the **Target Badge** at the top of the HUD updates.
-4.  Switch to **Attack** or **Scenarios**. Your target is already pre-filled.
-5.  **ENGAGE**.
+The HUD is a single-page application (SPA) that interfaces with a Flask-based REST API. It is designed for low-latency operation and real-time process monitoring.
 
 ---
-*Reference: [USER_GUIDE.md](../USER_GUIDE.md) for technical flags.*
+
+## Operational Modules
+
+### 1. System Console
+Located at the top of the interface, the console provides real-time system metrics:
+- **CPU & Memory**: Real-time resource utilization monitoring.
+- **Wireless Interface Status**: Indicates the current state of the primary monitoring interface (e.g., `wlan1`).
+- **Authorization Status**: Displays the current session state.
+
+### 2. Radar and Inventory
+The primary module for host and signal management.
+- **RADAR SCAN**: Triggers subnet-wide discovery or wireless signal mapping.
+- **Global Inventory**: A unified tracking system that persists discovered assets (IPs, BSSIDs, MACs) into a centralized database (`output/devices.json`).
+- **Target Selection**: Clicking an inventory item assigns it as the "Active Target," automatically prepopulating parameters for subsequent assessment tools.
+
+### 3. Tactical Assessment Tabs
+- **NETWORK**: Direct access to reconnaissance tools like Nmap, GoBuster, and SMB enumerators.
+- **WIFI**: Interface for Layer 2 assessments including handshake capture, PMKID extraction, and WPS research.
+- **SCENARIOS**: High-level automation triggers for pre-configured mission profiles.
+
+### 4. Process Monitoring (The Command HUD)
+The centralized display area provides real-time feedback from background processes.
+- **Activity Log**: Displays timestamped events and system notifications.
+- **Live Output**: Streams the `stdout` and `stderr` of active security tools, allowing for immediate observation of scan results.
+
+### 5. Historical Reporting
+The **REPORTS** tab serves as a centralized archive for all completed sessions.
+- **Log Retrieval**: Access and download individual tool logs.
+- **Capture Download**: Direct links to exported `.cap`, `.pcapng`, and `.nmap` files for offline analysis.
+
+---
+
+## User Interface Configuration
+
+### Virtual Keyboard
+For deployments utilizing touch-screen LCDs with limited physical input, an integrated virtual keyboard is provided for data entry in all parameter fields.
+
+### Status Indicators
+- **Green**: Service/Interface active and functioning correctly.
+- **Yellow**: Process in progress or non-critical warning.
+- **Red**: Error detected or vulnerable service identified.
+
+---
+*For technical implementation details, refer to the [Technical User Guide](../USER_GUIDE.md).*

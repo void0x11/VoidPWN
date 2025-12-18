@@ -5,7 +5,7 @@ VoidPWN Dashboard Server
 Simple Flask server to provide API endpoints for the dashboard
 """
 
-from flask import Flask, jsonify, send_from_directory, request, session, redirect, url_for
+from flask import Flask, jsonify, send_from_directory
 import subprocess
 import os
 import glob
@@ -144,57 +144,6 @@ class DeviceManager:
         return self.selected_device
 
 app = Flask(__name__, static_folder='.')
-app.secret_key = os.urandom(24) # Change this to a static key if you want persistent sessions across restarts
-
-# Authentication Configuration
-DASHBOARD_PASSWORD = "voidpwn" # Default password
-
-def is_local_request():
-    """Check if the request is coming from the local machine (Pi) or localhost"""
-    remote = request.remote_addr
-    # Usually 127.0.0.1 or ::1 for localhost
-    # Also check if it's the Pi's own IP if we can determine it
-    return remote in ['127.0.0.1', '::1']
-
-@app.before_request
-def check_auth():
-    """Check authentication before every request"""
-    # Allow access to static files and login endpoint
-    if request.path.startswith('/static') or \
-       request.path == '/api/login' or \
-       request.path == '/login.html' or \
-       is_local_request():
-        return
-    
-    # Check session
-    if not session.get('authenticated'):
-        # For API requests, return 401
-        if request.path.startswith('/api/'):
-            return jsonify({'error': 'Unauthorized', 'login_required': True}), 401
-        # For page requests, we'll handle this in the frontend app.js to show the overlay
-        # or we could redirect here, but integrated overlay is "cooler"
-        pass
-
-@app.route('/api/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    password = data.get('password')
-    if password == DASHBOARD_PASSWORD:
-        session['authenticated'] = True
-        return jsonify({'status': 'success', 'message': 'Authenticated'})
-    return jsonify({'status': 'error', 'message': 'Invalid password'}), 401
-
-@app.route('/api/logout', methods=['POST'])
-def logout():
-    session.pop('authenticated', None)
-    return jsonify({'status': 'success', 'message': 'Logged out'})
-
-@app.route('/api/auth/status')
-def auth_status():
-    return jsonify({
-        'authenticated': session.get('authenticated', False) or is_local_request(),
-        'is_local': is_local_request()
-    })
 
 # Configuration
 # Dynamic path: server.py is in /dashboard/ -> Project root is one level up
@@ -949,19 +898,5 @@ def action_throttle():
 
 if __name__ == '__main__':
     print("Starting VoidPWN Dashboard Server...")
-    
-    # Optional SSL support
-    cert_path = os.path.join(os.path.dirname(__file__), 'cert.pem')
-    key_path = os.path.join(os.path.dirname(__file__), 'key.pem')
-    
-    ssl_context = None
-    if os.path.exists(cert_path) and os.path.exists(key_path):
-        print("SSL Certificates found. Starting in HTTPS mode...")
-        ssl_context = (cert_path, key_path)
-        protocol = "https"
-    else:
-        print("No SSL certs found. Starting in HTTP mode.")
-        protocol = "http"
-        
-    print(f"Access dashboard at: {protocol}://<PI_IP>:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False, ssl_context=ssl_context)
+    print("Access dashboard at: http://<PI_IP>:5000")
+    app.run(host='0.0.0.0', port=5000, debug=False)

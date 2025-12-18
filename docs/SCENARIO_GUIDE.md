@@ -1,64 +1,47 @@
-# 🤖 Scenario Automation Guide
+# Scenario Automation Guide
 
-Scenarios are the "Auto-Pilot" of VoidPWN. They chain together complex CLI tools to perform high-level missions with zero manual flag entry. 
-
-## 🔄 How Scenarios Work
-
-A scenario is a state-machine that follows a predefined script (`scenarios.sh`).
-
-```mermaid
-stateDiagram-v2
-    [*] --> Init: Start Scenario
-    Init --> Recon: Scan Target/Network
-    Recon --> Filter: Extract Target Hosts/SSIDs
-    Filter --> Attack: Execute Payload (Deauth, Vuln Scan, etc)
-    Attack --> Report: Summarize Results
-    Report --> [*]: Operation Complete
-```
+Automated scenarios in VoidPWN are designed to orchestrate complex toolchains into streamlined workflows. These scenarios leverage a state-machine logic to execute multi-stage security assessments with minimal manual intervention.
 
 ---
 
-## 🏃 Available Mission Walkthroughs
+## Technical Workflows
 
-### 1. **WiFi Audit (The "One-Button Hack")**
-*   **Goal**: Find and test the security of all local WiFi APs.
-*   **Workflow**:
-    1.  Toggles **wlan1** into monitor mode.
-    2.  Runs `airodump-ng` for 10 minutes to populate a list of BSSIDs.
-    3.  Filters for networks with weak encryption or WPS enabled.
-    4.  Sequential capture attempts on all high-signal targets.
-*   **Tutorial Tip**: Running this during peak hours (e.g., afternoon) increases the chance of capturing active handshakes.
+### 1. Wireless Security Audit
+*   **Objective**: Automated identification and vulnerability assessment of local wireless access points.
+*   **Toolchain**: `airodump-ng` -> `hcxdumptool` -> `aireplay-ng` -> `aircrack-ng`.
+*   **Workflow Logic**:
+    1.  **Passive Discovery**: Interface initialization and background sniffing to catalogue BSSIDs and signal metrics.
+    2.  **Clientless Assessment**: Execution of `hcxdumptool` for a defined duration to attempt PMKID hash extraction from all detected APs.
+    3.  **Active Assessment**: For networks with active clients, the platform executes targeted deauthentication bursts to capture the WPA 4-way handshake.
+*   **Result Persistence**: All captured hashes and logs are timestamped and archived for offline analysis.
 
-### 2. **Stealth Recon (Shadow Mission)**
-*   **Goal**: Map a target network without being detected by Firewalls or IDS (Intrusion Detection Systems).
-*   **Secrets of the Logic**:
-    - **Timing (T2)**: Instead of the default T4, T2 sends packets slowly to blend into background noise.
-    - **Fragmentation**: Splits up the TCP headers so a simple firewall can't read the full destination port initially.
-    - **Decoy Field**: Includes 10 real-looking IP addresses in the packet source. The firewall sees 11 scans at once and cannot tell which one is the "true" Pi.
+### 2. Stealth Network Reconnaissance
+*   **Objective**: Subnet mapping and service identification in monitored or restrictive environments.
+*   **Tool**: `nmap` (Configured for evasion).
+*   **Evasion Logic**:
+    - **Timing (T2)**: Implementation of a polite timing template to reduce the frequency of probes, staying below most IDS rate-limiting thresholds.
+    - **Decoy Scanning**: Inclusion of randomized decoy IP addresses in the packet headers to obscure the origin of the scan.
+*   **Workflow Logic**: The scan is executed within a detached terminal session, ensuring persistence even if the user interface connection is interrupted.
 
-### 3. **Web Application Hunt (Service Discovery)**
-*   **Goal**: Find vulnerabilities in every web-facing server on the network.
-*   **Workflow**:
-    1.  Discovery of common web ports (`80, 443, 8080, 8443`).
-    2.  `WhatWeb` identifies the technology stack (e.g., Apache, Nginx, PHP).
-    3.  `GoBuster` brute-forces directories searching for hidden admin panels or `/config` backups.
-    4.  `Nikto` performs a final sweep for 6000+ known web vulnerabilities.
-
----
-
-## 📊 Comparison: Which Scenario to Run?
-
-| Mission | Speed | Detection Risk | Primary Tool | Best For |
-| :--- | :--- | :--- | :--- | :--- |
-| **WiFi Audit** | Medium | High | `Aircrack-ng` | WiFi Security Testing |
-| **Stealth Recon** | SLOW | **ULTRA LOW** | `Nmap` | Bypassing Enterprise Security |
-| **Web Hunt** | Fast | Medium | `GoBuster/Nikto` | Identifying Web Weaknesses |
-| **Quick Assess** | **ULTRA FAST** | High | `Nmap` | Fast status check of a new LAN |
+### 3. Web Service Intelligence
+*   **Objective**: Identification and vulnerability scanning of HTTP/HTTPS interfaces across the network.
+*   **Toolchain**: `nmap` -> `WhatWeb` -> `GoBuster` -> `Nikto`.
+*   **Workflow Logic**:
+    1.  **Service Discovery**: Targeted port scanning for common web interfaces (80, 443, 8080, 8443).
+    2.  **Fingerprinting**: Technical identification of the technology stack (e.g., PHP version, CMS type, web server header).
+    3.  **Directory Fuzzing**: Brute-force discovery of unlinked directories and sensitive files.
+    4.  **Security Audit**: Execution of comprehensive vulnerability signatures to identify known server-side flaws.
 
 ---
 
-## 💡 Operative's Tip: Automated Persistence
-Every scenario automatically saves its output into a timestamped folder: `output/scenarios/MISSION_TIME/`. You can browse these results at any time in the **REPORTS** tab of the HUD.
+## Scenario Comparison Matrix
+
+| Scenario Profile | Execution Speed | Detection Risk | Primary Focus |
+| :--- | :--- | :--- | :--- |
+| **Wireless Audit** | Moderate | High (Active) | WPA/WPS Vulnerabilities |
+| **Stealth Recon** | Low | Very Low | IDS Evasion |
+| **Web Service Hunt** | High | Moderate | Application Vulnerabilities |
+| **Quick Discovery** | Very High | Moderate | Asset Inventory |
 
 ---
-*Reference: [HUD_MANUAL.md](./HUD_MANUAL.md) for UI controls.*
+*For a comprehensive theoretical analysis, refer to the [Attack and Feature Reference](./ATTACK_REFERENCE.md).*
