@@ -30,8 +30,8 @@
         <!-- Sidebar Navigation -->
         <nav>
             <button class="nav-btn active" data-tab="connect">
-                <span class="material-icons">wifi</span>
-                <span class="nav-label">WIFI CONNECT</span>
+                <span class="material-icons">lan</span>
+                <span class="nav-label">INTERFACES</span>
             </button>
             <button class="nav-btn" data-tab="scan">
                 <span class="material-icons">radar</span>
@@ -59,20 +59,18 @@
         <main>
             <div class="content-left">
 
-                <!-- TAB 1: CONNECT -->
+                <!-- TAB 1: INTERFACES -->
                 <div id="tab-connect" class="tab-content active">
                     <div class="panel">
                         <div class="panel-header">
-                            <h2>WiFi Network Manager</h2>
-                            <button class="btn" id="scan-wifi-btn" onclick="scanWifi()">SCAN</button>
+                            <h2>Active Interfaces</h2>
+                            <button class="btn" id="scan-wifi-btn" onclick="loadInterfaces()">REFRESH</button>
                         </div>
-                        <div id="wifi-list" class="device-list" style="height: 250px; overflow-y: auto;">
-                            <!-- WiFi list populated by JS -->
+                        <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:15px">
+                            Select an interface to identify its subnet and scan for devices.
                         </div>
-                        <div style="margin-top:20px;">
-                            <input type="password" id="wifi-password-input" placeholder="WIFI PASSWORD"
-                                onclick="showKeyboard('wifi-password-input')">
-                            <button class="btn" style="width:100%" onclick="connectWifi()">CONNECT</button>
+                        <div id="wifi-list" class="device-list" style="height: 320px; overflow-y: auto;">
+                            <!-- Interface list populated by JS -->
                         </div>
                     </div>
                 </div>

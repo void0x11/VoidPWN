@@ -330,52 +330,56 @@ def scan_devices():
         data = request.get_json() or {}
         mode = data.get('mode', 'quick') # quick or full
         
-        # Get local network
-        ip_result = subprocess.run(['hostname', '-I'], capture_output=True, text=True)
-        if not ip_result.stdout:
-            return jsonify({'error': 'No local IP found'}), 400
-            
-        local_ip = ip_result.stdout.strip().split()[0]
-        network = '.'.join(local_ip.split('.')[:-1]) + '.0/24'
+        # Get target network/subnet
+        target_subnet = data.get('subnet')
+        interface = data.get('interface')
+        
+        if not target_subnet:
+            if interface:
+                # Get IP of interface
+                ip_cmd = f"ip -4 addr show {interface} | grep -oP '(?<=inet\s)\d+(\.\d+){{3}}'"
+                ip_res = subprocess.run(ip_cmd, shell=True, capture_output=True, text=True)
+                local_ip = ip_res.stdout.strip()
+                if not local_ip:
+                    return jsonify({'error': f'No IP on {interface}'}), 400
+                target_subnet = '.'.join(local_ip.split('.')[:-1]) + '.0/24'
+            else:
+                # Fallback to hostname -I
+                ip_result = subprocess.run(['hostname', '-I'], capture_output=True, text=True)
+                if not ip_result.stdout:
+                    return jsonify({'error': 'No local IP found'}), 400
+                local_ip = ip_result.stdout.strip().split()[0]
+                target_subnet = '.'.join(local_ip.split('.')[:-1]) + '.0/24'
         
         # Perform nmap scan
-        log_msg = f"Starting {mode} network discovery on {network}..."
+        log_msg = f"Starting {mode} network discovery on {target_subnet}..."
         reporter.add_report("SCAN", "Local Network", "Running", log_msg)
         
-        # Use nmap -sn for fast discovery (ping scan)
-        # or nmap -sV for more info
         if mode == 'full':
-            cmd = ['sudo', 'nmap', '-sV', '-T4', network]
+            cmd = ['sudo', 'nmap', '-sV', '-T4', target_subnet]
         else:
-            cmd = ['sudo', 'nmap', '-sn', network]
+            cmd = ['sudo', 'nmap', '-sn', target_subnet]
             
         result = subprocess.run(cmd, capture_output=True, text=True)
         
-        # Simple parsing of nmap output
-        # Format: Nmap scan report for <hostname> (<ip>)
-        # or Nmap scan report for <ip>
+        # Automated Inventory Addition
         found_count = 0
-        current_ip = None
-        current_host = "Unknown"
-        
         for line in result.stdout.split('\n'):
             if "Nmap scan report for" in line:
                 match = re.search(r"for ([\d\.]+)", line)
-                if match:
-                    current_ip = match.group(1)
-                    host_match = re.search(r"for (.*) \([\d\.]+\)", line)
-                    current_host = host_match.group(1) if host_match else "Unknown"
-                else:
-                    match = re.search(r"for (.*)", line)
-                    current_ip = match.group(1)
-                    current_host = "Unknown"
+                current_ip = match.group(1) if match else None
+                if not current_ip:
+                    match = re.search(r"for (.*) \(([\d\.]+)\)", line)
+                    current_ip = match.group(2) if match else None
                 
                 if current_ip:
-                    device_manager.add_device(current_ip, hostname=current_host)
+                    device_manager.add_device(current_ip)
                     found_count += 1
         
-        reporter.add_report("SCAN", "Local Network", "Success", f"Discovered {found_count} devices")
-        return jsonify({'status': 'success', 'count': found_count, 'devices': device_manager.get_all()})
+        reporter.add_report("SCAN", "Local Network", "Success", f"Discovered and added {found_count} devices to inventory.")
+        return jsonify({'status': 'success', 'count': found_count, 'subnet': target_subnet})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -413,65 +417,53 @@ def clear_devices():
 CURRENT_TARGET = None
 SCAN_RUNNING = False
 
+@app.route('/api/interfaces')
+def list_interfaces():
+    """List UP network interfaces and their IPs"""
+    try:
+        import psutil
+        interfaces = []
+        stats = psutil.net_if_stats()
+        addrs = psutil.net_if_addrs()
+        
+        for name, stat in stats.items():
+            if stat.isup and name != 'lo':
+                ip = "N/A"
+                if name in addrs:
+                    for addr in addrs[name]:
+                        if addr.family == 2: # AF_INET
+                            ip = addr.address
+                            break
+                interfaces.append({
+                    'name': name,
+                    'ip': ip,
+                    'speed': stat.speed
+                })
+        return jsonify({'interfaces': interfaces})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/wifi/status')
 def wifi_status():
     """Check if connected to internet/network"""
     try:
-        # Check connectivity
-        result = subprocess.run(['nmcli', '-t', '-f', 'ACTIVE,SSID', 'dev', 'wifi'], capture_output=True, text=True)
-        current = "Disconnected"
-        for line in result.stdout.split('\n'):
-            if line.startswith('yes'):
-                current = line.split(':')[1]
-                break
-        return jsonify({'connected': current != "Disconnected", 'ssid': current})
+        # Simplified: just return primary default interface IP
+        result = subprocess.run(['hostname', '-I'], capture_output=True, text=True)
+        ips = result.stdout.strip().split()
+        return jsonify({'connected': len(ips) > 0, 'ip': ips[0] if ips else "N/A"})
     except:
-        return jsonify({'connected': False, 'ssid': "Error"})
+        return jsonify({'connected': False, 'ip': "N/A"})
 
-@app.route('/api/wifi/networks')
-def list_wifi_networks():
-    """Scan for networks to connect to (Managed mode)"""
-    try:
-        # Use nmcli for connection scans
-        cmd = ['nmcli', '-t', '-f', 'SSID,SIGNAL,SECURITY', 'dev', 'wifi', 'list']
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        networks = []
-        seen = set()
-        for line in result.stdout.split('\n'):
-            if not line: continue
-            parts = line.split(':')
-            if len(parts) >= 3:
-                ssid = parts[0]
-                if not ssid or ssid in seen: continue
-                seen.add(ssid)
-                networks.append({
-                    'ssid': ssid,
-                    'signal': parts[1],
-                    'security': parts[2]
-                })
-        return jsonify({'networks': networks})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/wifi/connect', methods=['POST'])
-def connect_wifi():
-    """Connect to a WiFi network"""
-    try:
-        data = request.get_json()
-        ssid = data.get('ssid')
-        password = data.get('password')
-        
-        if not ssid:
-            return jsonify({'error': 'SSID required'}), 400
-            
-        cmd = ['sudo', 'nmcli', 'dev', 'wifi', 'connect', ssid]
-        if password:
-            cmd.extend(['password', password])
-            
-        subprocess.Popen(cmd)
-        return jsonify({'status': 'success', 'message': f'Connecting to {ssid}...'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@app.route('/api/target/subnet', methods=['POST'])
+def select_subnet_target():
+    """Set the current active target to a subnet"""
+    global CURRENT_TARGET
+    data = request.get_json()
+    subnet = data.get('subnet')
+    if subnet:
+        CURRENT_TARGET = {'type': 'subnet', 'cidr': subnet, 'ssid': subnet}
+        return jsonify({'status': 'success', 'target': CURRENT_TARGET})
+    return jsonify({'error': 'Subnet required'}), 400
 
 @app.route('/api/target/select', methods=['POST'])
 def select_target():

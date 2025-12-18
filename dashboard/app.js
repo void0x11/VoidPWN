@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initTabs();
     initRefresh();
     await loadDeviceList();
+    await loadInterfaces();
     await checkSelectedDevice();
     loadReports();
     refreshSystemInfo();
@@ -89,12 +90,17 @@ async function loadDeviceList() {
 }
 
 async function scanDevices(mode = 'quick') {
-    log(`Starting ${mode} device discovery...`);
-    const res = await api('/api/devices/scan', 'POST', { mode });
+    log(`Starting ${mode} network discovery...`);
+    // Use currently selected network if it's a subnet
+    const body = { mode };
+    if (state.selectedNetwork && state.selectedNetwork.type === 'subnet') {
+        body.subnet = state.selectedNetwork.cidr;
+    }
+
+    const res = await api('/api/devices/scan', 'POST', body);
     if (res.status === 'success') {
-        log(`✓ Discovered ${res.count} devices.`);
-        state.devices = res.devices;
-        renderDeviceList();
+        log(`✓ Discovered ${res.count} devices on ${res.subnet || 'default subnet'}. Added to inventory.`, 'success');
+        await loadDeviceList();
     } else {
         log(`ERROR: ${res.error}`, 'error');
     }
@@ -153,19 +159,24 @@ function updateTargetDisplays() {
 
     // Update inputs
     const inputs = document.querySelectorAll('.target-input');
-    inputs.forEach(i => i.value = state.selectedDevice ? state.selectedDevice.ip : (state.selectedNetwork ? state.selectedNetwork.bssid : ''));
+    inputs.forEach(i => {
+        if (state.selectedDevice) i.value = state.selectedDevice.ip;
+        else if (state.selectedNetwork) i.value = state.selectedNetwork.cidr || state.selectedNetwork.ssid || state.selectedNetwork.bssid;
+        else i.value = "";
+    });
 }
 
 // --- WiFi / Network ---
-async function scanWifi() {
+// --- Network Interfaces & Discovery ---
+async function loadInterfaces() {
     const btn = document.getElementById('scan-wifi-btn');
-    btn.textContent = "SCANNING...";
+    btn.textContent = "REFRESHING...";
     btn.disabled = true;
 
     const list = document.getElementById('wifi-list');
-    list.innerHTML = '<div style="text-align:center; padding: 20px;">ACCESSING ADAPTER...</div>';
+    list.innerHTML = '<div style="text-align:center; padding: 20px;">FETCHING NICS...</div>';
 
-    const res = await api('/api/wifi/networks');
+    const res = await api('/api/interfaces');
     btn.textContent = "REFRESH";
     btn.disabled = false;
 
@@ -174,77 +185,54 @@ async function scanWifi() {
         return;
     }
 
-    if (res.networks) {
-        state.networks = res.networks;
+    if (res.interfaces) {
         list.innerHTML = '';
-        res.networks.forEach(net => {
+        res.interfaces.forEach(nic => {
             const row = document.createElement('div');
             row.className = 'device-card';
-
-            // Security check
-            const isOpen = net.security === '--' || net.security.toLowerCase().includes('none') || net.security === '';
-
             row.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center mb:5px">
-                <span style="font-weight:bold">${net.ssid}</span>
-                <span style="color:var(--primary); font-size:0.8rem">${net.signal}%</span>
-            </div>
-            <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:8px">${net.security}</div>
-            <div class="card-actions">
-                <button class="btn-mini" onclick="event.stopPropagation(); quickConnect('${net.ssid}', true)">CONNECT</button>
-                ${!isOpen ? `<button class="btn-mini" style="border-color:var(--secondary)" onclick="event.stopPropagation(); quickConnect('${net.ssid}', false)">BYPASS</button>` : ''}
-            </div>
-        `;
-            row.onclick = () => {
-                state.selectedNetwork = net;
-                selectTargetNetwork(net);
-            };
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px">
+                    <span style="font-weight:bold">${nic.name}</span>
+                    <span style="color:var(--primary); font-size:0.8rem">${nic.ip}</span>
+                </div>
+                <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:8px">Speed: ${nic.speed}Mb/s</div>
+                <div class="card-actions">
+                    <button class="btn-mini" onclick="event.stopPropagation(); selectInterface('${nic.name}', '${nic.ip}')">SET TARGET</button>
+                    <button class="btn-mini" style="border-color:var(--secondary)" onclick="event.stopPropagation(); scanSubnet('${nic.name}', '${nic.ip}')">SCAN SUBNET</button>
+                </div>
+            `;
             list.appendChild(row);
         });
     }
 }
 
-/**
- * Quick connect logic
- * @param {string} ssid 
- * @param {boolean} askPass 
- */
-async function quickConnect(ssid, askPass) {
-    if (askPass) {
-        // Just focus the input and show keyboard automatically
-        const input = document.getElementById('wifi-password-input');
-        input.value = '';
-        input.placeholder = `Pass for ${ssid}...`;
-        showKeyboard('wifi-password-input');
-        // Select the network in state so the global CONNECT button works
-        const net = state.networks?.find(n => n.ssid === ssid);
-        if (net) selectTargetNetwork(net);
-    } else {
-        // Bypass - attempt connection without password
-        log(`Bypassing password for ${ssid}...`);
-        const res = await api('/api/wifi/connect', 'POST', { ssid, password: '' });
-        if (res.status === 'success') log(res.message, 'success');
-        else log(res.error, 'error');
+async function selectInterface(name, ip) {
+    if (ip === "N/A" || !ip) return log("Interface has no IP!", "error");
+    const subnet = ip.split('.').slice(0, 3).join('.') + '.0/24';
+    log(`Setting target to subnet: ${subnet}...`);
+    const res = await api('/api/target/subnet', 'POST', { subnet });
+    if (res.status === 'success') {
+        state.selectedNetwork = res.target;
+        updateTargetDisplays();
+        log(`TARGET UPDATED: ${subnet}`, 'success');
     }
 }
 
-async function selectTargetNetwork(net) {
-    state.selectedNetwork = net;
-    // Notify backend
-    await api('/api/target/select', 'POST', net);
+async function scanSubnet(name, ip) {
+    if (ip === "N/A" || !ip) return log("Interface has no IP!", "error");
+    const subnet = ip.split('.').slice(0, 3).join('.') + '.0/24';
+    log(`Starting automated discovery on ${subnet} via ${name}...`);
 
-    document.getElementById('wifi-password-input').placeholder = `Password for ${net.ssid}`;
-    updateTargetDisplays();
-    log(`NETWORK TARGET: ${net.ssid} (${net.bssid || 'Managed'})`);
-}
+    // Switch to Scan Tab visually
+    document.querySelector('[data-tab="scan"]').click();
 
-async function connectWifi() {
-    if (!state.selectedNetwork) return alert("Select a network!");
-    const net = state.selectedNetwork;
-    const pass = document.getElementById('wifi-password-input').value;
-    log(`Connecting to ${net.ssid}...`);
-    const res = await api('/api/wifi/connect', 'POST', { ssid: net.ssid, password: pass });
-    if (res.status === 'success') log(res.message, 'success');
+    const res = await api('/api/devices/scan', 'POST', { interface: name, mode: 'quick' });
+    if (res.status === 'success') {
+        log(`Discovered ${res.count} devices on ${res.subnet}`, 'success');
+        await loadDeviceList();
+    } else {
+        log(res.error, 'error');
+    }
 }
 
 // --- Attacks & Recon ---
