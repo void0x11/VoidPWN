@@ -711,15 +711,18 @@ def action_evil_twin():
     channel = CURRENT_TARGET.get('channel', '6')
     
     try:
+        log_file = gen_log_name(f"eviltwin_{ssid}")
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --evil-twin \"{ssid}\" {channel}"
-        subprocess.Popen(cmd, shell=True)
         
-        reporter.add_report(
+        report = reporter.add_report(
             "WIFI (EVIL TWIN)", 
             ssid, 
             "Started", 
-            f"Launched Evil Twin on Ch {channel}"
+            f"Launched Evil Twin on Ch {channel}",
+            log_file=log_file
         )
+        
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         
         return jsonify({'status': 'success', 'message': f'Starting Evil Twin on {ssid}...'})
     except Exception as e:

