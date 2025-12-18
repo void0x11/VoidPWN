@@ -44,10 +44,37 @@ apt install -y \
 
 log_success "Dependencies installed"
 
-# 2. Configure X init script to launch Dashboard
-log_info "Configuring X11 startup script..."
+# 2. Configure Systemd Service for Dashboard (Backend)
+log_info "Configuring Dashboard Service..."
 USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
 VOIDPWN_DIR="$USER_HOME/VoidPWN"
+
+# Create Service File
+cat > /etc/systemd/system/voidpwn.service << EOF
+[Unit]
+Description=VoidPWN Dashboard Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$VOIDPWN_DIR/dashboard
+ExecStart=/usr/bin/python3 server.py
+Restart=always
+Environment=VOIDPWN_DIR=$VOIDPWN_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and Start Service
+systemctl daemon-reload
+systemctl enable voidpwn.service
+systemctl restart voidpwn.service
+log_success "Dashboard service installed and started (voidpwn.service)"
+
+# 3. Configure X init script to launch Kiosk (Frontend only)
+log_info "Configuring X11 startup script..."
 
 cat > /home/$SUDO_USER/.xinitrc << EOF
 #!/bin/bash
@@ -63,14 +90,11 @@ unclutter -idle 0.1 -root &
 # Start window manager (removes title bars for fullscreen feel)
 matchbox-window-manager -use_titlebar no &
 
-# Start the Dashboard Server in background
-cd $VOIDPWN_DIR/dashboard
-python3 server.py &
-
-# Wait for server to start
+# Wait a moment for network/server
 sleep 5
 
 # Start Chromium in Kiosk Mode
+# Pointing to localhost:5000 where the systemd service is running
 chromium --noerrdialogs --disable-infobars --kiosk http://localhost:5000 &
 
 # Keep session alive
