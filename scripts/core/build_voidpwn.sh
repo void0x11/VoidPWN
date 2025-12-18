@@ -40,7 +40,7 @@ cat << "EOF"
     ╦  ╦┌─┐┬┌┬┐╔═╗╦ ╦╔╗╔
     ╚╗╔╝│ │││ ││╠═╝║║║║║║
      ╚╝ └─┘┴└─┘┴╩  ╚╩╝╝╚╝
-    MASTER BUILD ORCHESTRATOR v3.0
+    MASTER BUILD ORCHESTRATOR v3.1
 EOF
 echo -e "${NC}"
 
@@ -48,16 +48,18 @@ log_info "Starting the complete VoidPWN build process."
 log_info "This script unifies all legacy setup files into a single technical deployment."
 echo ""
 
-# --- 1. System Foundation ---
+# --- 1. System Foundation (CRITICAL) ---
 log_step "PHASE 1: System Baseline & Dependencies"
 log_info "Updating package lists..."
-apt update -y
+apt update -y || log_warning "Apt update encountered issues. Continuing..."
+
 log_info "Installing core dependencies (X11, Chromium, Python, System utilities)..."
+# Critical dependencies use || exit 1 to ensure system baseline is met
 apt install -y \
     xserver-xorg x11-xserver-utils xinit xinput \
     matchbox-window-manager chromium unclutter \
     python3-flask python3-psutil python3-pip \
-    git wget curl iw pciutils net-tools
+    git wget curl iw pciutils net-tools || { log_error "Critical foundation tools failed!"; exit 1; }
 log_success "Foundation ready."
 
 # --- 2. Security Toolchain (Consolidated) ---
@@ -65,12 +67,14 @@ log_step "PHASE 2: Security Arsenal Installation"
 
 install_tool_group() {
     log_info "Installing $1..."
-    apt install -y $2
+    # Non-critical tools allow failure
+    apt install -y $2 || log_warning "Some packages in '$1' failed to install. Skipping non-critical tools."
 }
 
 # Wireless & Network
+# 'tc' is replaced with 'iproute2' which contains 'tc'
 install_tool_group "Wireless Suite" "aircrack-ng wifite bettercap mdk4 hcxdumptool hcxtools reaver pixiewps hostapd dnsmasq"
-install_tool_group "Network Recon" "nmap masscan wireshark tshark ettercap-text-only arp-scan dsniff tc gdb ltrace strace"
+install_tool_group "Network Recon" "nmap masscan wireshark tshark ettercap-text-only arp-scan dsniff iproute2 gdb ltrace strace"
 
 # Frameworks & Specialized Tools
 log_info "Installing Advanced Frameworks (SET, Empire)..."
