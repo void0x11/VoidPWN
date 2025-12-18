@@ -16,7 +16,9 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Configuration
-OUTPUT_DIR="$HOME/VoidPWN/output/recon"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+OUTPUT_DIR="$PROJECT_ROOT/output/recon"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Create output directory

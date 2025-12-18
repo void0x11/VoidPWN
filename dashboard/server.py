@@ -18,10 +18,14 @@ from datetime import datetime
 
 app = Flask(__name__, static_folder='.')
 
-# Paths
-VOIDPWN_DIR = os.path.expanduser('~/VoidPWN')
-CAPTURES_DIR = os.path.join(VOIDPWN_DIR, 'captures')
-RECON_DIR = os.path.join(VOIDPWN_DIR, 'recon')
+# Configuration
+# Dynamic path: server.py is in /dashboard/ -> Project root is one level up
+VOIDPWN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.environ['VOIDPWN_DIR'] = VOIDPWN_DIR
+
+# Paths to data
+CAPTURES_DIR = os.path.join(VOIDPWN_DIR, 'output', 'captures')
+RECON_DIR = os.path.join(VOIDPWN_DIR, 'output', 'recon')
 
 # Ensure directories exist
 os.makedirs(CAPTURES_DIR, exist_ok=True)
