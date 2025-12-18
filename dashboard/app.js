@@ -18,11 +18,39 @@ const state = {
 document.addEventListener('DOMContentLoaded', async () => {
     initTabs();
     initRefresh();
+    await checkAuthStatus();
     await loadDeviceList();
     await checkSelectedDevice();
     loadReports();
     refreshSystemInfo();
 });
+
+async function checkAuthStatus() {
+    const res = await api('/api/auth/status');
+    if (res.authenticated) {
+        document.getElementById('login-overlay').classList.remove('active');
+    } else {
+        document.getElementById('login-overlay').classList.add('active');
+    }
+}
+
+async function login() {
+    const password = document.getElementById('dashboard-password').value;
+    const errorDiv = document.getElementById('login-error');
+    errorDiv.style.display = 'none';
+
+    const res = await api('/api/login', 'POST', { password });
+    if (res.status === 'success') {
+        document.getElementById('login-overlay').classList.remove('active');
+        // Reload data after successful login
+        await loadDeviceList();
+        await checkSelectedDevice();
+        refreshSystemInfo();
+    } else {
+        errorDiv.style.display = 'block';
+        document.getElementById('dashboard-password').value = '';
+    }
+}
 
 async function checkSelectedDevice() {
     const res = await api('/api/devices/selected');
@@ -72,6 +100,13 @@ async function api(path, method = 'GET', body = null) {
         if (body) options.body = JSON.stringify(body);
 
         const response = await fetch(path, options);
+
+        if (response.status === 401) {
+            // Show login overlay on unauthorized access
+            document.getElementById('login-overlay').classList.add('active');
+            return { error: "Login Required" };
+        }
+
         return await response.json();
     } catch (err) {
         console.error(`API Error (${path}):`, err);

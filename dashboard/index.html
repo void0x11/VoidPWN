@@ -12,6 +12,19 @@
 
 <body>
 
+    <!-- Login Overlay -->
+    <div id="login-overlay">
+        <div class="login-box">
+            <div class="login-logo">VOID<span>PWN</span></div>
+            <div class="login-msg">EXTERNAL ACCESS RESTRICTED</div>
+            <input type="password" id="dashboard-password" placeholder="DASHBOARD PASSWORD"
+                onclick="showKeyboard('dashboard-password')">
+            <button class="btn" style="width:100%" onclick="login()">AUTHORIZE</button>
+            <div id="login-error" style="color:#ff5555; margin-top:15px; font-size:0.8rem; display:none">INVALID PASSWORD
+            </div>
+        </div>
+    </div>
+
     <header>
         <div class="logo">VOID<span>PWN</span> v3.0</div>
         <div class="system-stats">
