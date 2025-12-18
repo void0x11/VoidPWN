@@ -22,8 +22,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadInterfaces();
     await checkSelectedDevice();
     loadReports();
-    refreshSystemInfo();
-    setInterval(pollLiveLogs, 2000);
+    setInterval(refreshSystemInfo, 5000);
+    setInterval(pollLiveLogs, 1000);
 });
 
 async function checkSelectedDevice() {
@@ -325,23 +325,25 @@ function log(msg, type = '') {
     container.scrollTop = container.scrollHeight;
 }
 
+let lastLogsHash = "";
 async function pollLiveLogs() {
     const res = await api('/api/logs/live');
-    if (res.logs && res.logs.length > 0) {
-        const container = document.getElementById('attack-log');
-        const currentCount = container.querySelectorAll('.log-entry').length;
+    if (res.logs) {
+        const logsJSON = JSON.stringify(res.logs);
+        if (logsJSON === lastLogsHash) return; // No changes
 
-        // If we have new logs, append them
-        if (res.logs.length > currentCount || (res.logs.length > 0 && currentCount === 0)) {
-            container.innerHTML = '';
-            res.logs.forEach(l => {
-                const entry = document.createElement('div');
-                entry.className = `log-entry ${l.type}`;
-                entry.innerHTML = `<span class="time">[${l.time}]</span> <span class="msg">${l.msg}</span>`;
-                container.appendChild(entry);
-            });
-            container.scrollTop = container.scrollHeight;
-        }
+        lastLogsHash = logsJSON;
+        const container = document.getElementById('attack-log');
+        if (!container) return;
+
+        container.innerHTML = '';
+        res.logs.forEach(l => {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${l.type}`;
+            entry.innerHTML = `<span class="time">[${l.time}]</span> <span class="msg">${l.msg}</span>`;
+            container.appendChild(entry);
+        });
+        container.scrollTop = container.scrollHeight;
     }
 }
 

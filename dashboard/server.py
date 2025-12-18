@@ -21,6 +21,7 @@ except ImportError:
 import time
 import uuid
 import collections
+import threading
 
 # --- Circular Log for Live HUD ---
 LIVE_LOGS = collections.deque(maxlen=100)
@@ -32,6 +33,10 @@ def add_live_log(msg, type="info"):
 def run_proc_and_capture(cmd_str):
     """Run a process in the background and capture its output to LIVE_LOGS"""
     try:
+        # Force line buffering at the system level
+        if not cmd_str.startswith('stdbuf'):
+            cmd_str = f"stdbuf -oL -eL {cmd_str}"
+            
         proc = subprocess.Popen(
             cmd_str,
             shell=True,
@@ -48,9 +53,13 @@ def run_proc_and_capture(cmd_str):
                     add_live_log(line.strip())
             proc.stdout.close()
             proc.wait()
+            # Prominent completion message
+            cmd_name = cmd_str.split()[-1].split('/')[-1].replace('"','')
+            add_live_log(f"✅ MISSION COMPLETE: {cmd_name}", "success")
             
-        import threading
-        threading.Thread(target=capture, daemon=True).start()
+        # Ensure we don't have zombie processes stalling
+        t = threading.Thread(target=capture, daemon=True)
+        t.start()
         return proc
     except Exception as e:
         add_live_log(f"Error starting process: {str(e)}", "error")
@@ -748,8 +757,7 @@ def action_crack():
         filename = os.path.basename(latest_cap)
         
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --crack \"{latest_cap}\""
-        # Running in background, but ideally needs output streaming
-        subprocess.Popen(cmd, shell=True)
+        run_proc_and_capture(cmd)
         
         reporter.add_report(
             "CRACK", 
@@ -757,6 +765,7 @@ def action_crack():
             "Started", 
             "Wordlist attack initiated"
         )
+        add_live_log(f"CRACKING STARTED: {filename}", "info")
         return jsonify({'status': 'success', 'message': f'Cracking {filename}...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -766,7 +775,7 @@ def action_wifite():
     """Launch automated Wifite attack"""
     try:
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auto-attack"
-        subprocess.Popen(cmd, shell=True)
+        run_proc_and_capture(cmd)
         
         reporter.add_report(
             "WIFITE", 
@@ -774,6 +783,7 @@ def action_wifite():
             "Started", 
             "Automated Wifite Attack"
         )
+        add_live_log("WIFITE AUTO-ATTACK STARTED", "info")
         return jsonify({'status': 'success', 'message': 'Launched Wifite Auto-Attack'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -791,7 +801,7 @@ def action_recon():
     try:
         flag = f"--{mode}"
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/recon.sh {flag} \"{target}\""
-        subprocess.Popen(cmd, shell=True)
+        run_proc_and_capture(cmd)
         
         reporter.add_report(
             "RECON", 
@@ -811,7 +821,7 @@ def action_pmkid():
     
     try:
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pmkid {duration}"
-        subprocess.Popen(cmd, shell=True)
+        run_proc_and_capture(cmd)
         
         reporter.add_report(
             "PMKID", 
@@ -831,7 +841,7 @@ def action_beacon():
     
     try:
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon {ssid_file}"
-        subprocess.Popen(cmd, shell=True)
+        run_proc_and_capture(cmd)
         
         reporter.add_report(
             "BEACON_FLOOD", 
@@ -851,7 +861,7 @@ def action_auth_flood():
     
     try:
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auth {target}"
-        subprocess.Popen(cmd, shell=True)
+        run_proc_and_capture(cmd)
         
         reporter.add_report(
             "AUTH_FLOOD", 
@@ -874,7 +884,7 @@ def action_pixie():
         
     try:
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pixie {target}"
-        subprocess.Popen(cmd, shell=True)
+        run_proc_and_capture(cmd)
         
         reporter.add_report(
             "PIXIE_DUST", 
@@ -940,7 +950,7 @@ def action_throttle():
     
     try:
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_throttle.sh {target} {speed}"
-        subprocess.Popen(cmd, shell=True)
+        run_proc_and_capture(cmd)
         reporter.add_report("THROTTLE", target, "Running", f"Limiting to {speed}")
         return jsonify({'status': 'success', 'message': f'Throttling {target} to {speed}'})
     except Exception as e:
