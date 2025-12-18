@@ -588,15 +588,80 @@ def get_live_logs():
 
 @app.route('/api/logs/view/<filename>')
 def view_full_log(filename):
-    """Read the content of a specific log file"""
+    """Read the content of a specific log file (truncated)"""
     # Security: strip any path traversal attempts
     safe_name = os.path.basename(filename)
     log_path = os.path.join(LOGS_DIR, safe_name)
     
     if os.path.exists(log_path):
-        with open(log_path, 'r') as f:
-            return jsonify({'content': f.read()})
+        try:
+            # Read only last 2000 lines for performance
+            cmd = f"tail -n 2000 \"{log_path}\""
+            result = subprocess.check_output(cmd, shell=True).decode('utf-8', errors='replace')
+            return jsonify({'content': result})
+        except Exception as e:
+            return jsonify({'error': f"Failed to read log: {str(e)}"}), 500
     return jsonify({'error': 'Log file not found'}), 404
+
+@app.route('/api/logs/download/<filename>')
+def download_log(filename):
+    """Download the full raw log file"""
+    safe_name = os.path.basename(filename)
+    log_path = os.path.join(LOGS_DIR, safe_name)
+    if os.path.exists(log_path):
+        return send_from_directory(LOGS_DIR, safe_name, as_attachment=True)
+    return jsonify({'error': 'File not found'}), 404
+
+@app.route('/api/action/tft', methods=['POST'])
+def action_switch_tft():
+    """Switch to TFT output (install_lcd.sh)"""
+    try:
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/core/install_lcd.sh"
+        subprocess.Popen(cmd, shell=True)
+        
+        reporter.add_report(
+            "SYSTEM", 
+            "Display", 
+            "Rebooting", 
+            "Switching to TFT output"
+        )
+        
+        return jsonify({'status': 'success', 'message': 'Switching to TFT & Rebooting...'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/action/hdmi', methods=['POST'])
+def action_switch_hdmi():
+    """Stop all active attacks and scans"""
+    global SCAN_RUNNING
+    try:
+        # Kill common attack tools
+        tools = ['aireplay-ng', 'airodump-ng', 'airbase-ng', 'wifite', 'bettercap', 'hcxdumptool', 'mdk4', 'nmap', 'reaver', 'bully']
+        for tool in tools:
+            subprocess.run(['sudo', 'killall', tool], stderr=subprocess.DEVNULL)
+            
+        SCAN_RUNNING = False
+        add_live_log("🛑 STOPPED ALL ATTACKS", "error")
+        return jsonify({'status': 'success', 'message': 'All active attacks stopped.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/action/stop', methods=['POST'])
+def action_stop_all():
+    """Stop all active attacks and scans"""
+    global SCAN_RUNNING
+    try:
+        # Kill common attack tools
+        tools = ['aireplay-ng', 'airodump-ng', 'airbase-ng', 'wifite', 'bettercap', 'hcxdumptool', 'mdk4', 'nmap', 'reaver', 'bully']
+        for tool in tools:
+            subprocess.run(['sudo', 'killall', tool], stderr=subprocess.DEVNULL)
+            
+        SCAN_RUNNING = False
+        add_live_log("🛑 STOPPED ALL ATTACKS", "error")
+        return jsonify({'status': 'success', 'message': 'All active attacks stopped.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/target/current')
@@ -637,14 +702,29 @@ def start_scan():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/scan/stop')
+def stop_scan():
+    """Stop the background airodump scan"""
+    global SCAN_RUNNING
+    try:
+        subprocess.run(['sudo', 'killall', 'airodump-ng'], stderr=subprocess.DEVNULL)
+        SCAN_RUNNING = False
+        reporter.add_report("SCAN", "WiFi Networks", "Stopped", "Network scan stopped")
+        return jsonify({'status': 'success', 'message': 'Scan stopped'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/scan/results')
 def get_scan_results():
-    """Parse the CSV from airodump"""
+    """Parse airodump CSV and return networks"""
+    output_dir = os.path.join(VOIDPWN_DIR, 'output', 'captures')
+    
+    # Return empty if scan is running but no file yet
     try:
-        scan_dir = os.path.join(VOIDPWN_DIR, 'output', 'captures') # Reusing captures dir for now
-        # Ideally we find the latest .csv
-        files = glob.glob(os.path.join(scan_dir, '*.csv'))
+        files = glob.glob(os.path.join(output_dir, '*.csv'))
         if not files:
+            if SCAN_RUNNING:
+                return jsonify({'networks': [], 'message': 'Scan running, no results yet.'})
             return jsonify({'networks': []})
             
         latest = max(files, key=os.path.getctime)

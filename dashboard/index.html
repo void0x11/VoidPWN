@@ -15,6 +15,9 @@
     <header>
         <div class="logo">VOID<span>PWN</span> v3.0</div>
         <div class="system-stats">
+            <button class="btn" onclick="stopAttacks()" style="background:var(--danger); border-color:var(--danger)">
+                <span class="material-icons" style="font-size:1rem; vertical-align:middle">stop</span> STOP ALL
+            </button>
             <div class="stat-item"><span class="stat-label">CPU:</span> <span id="val-cpu" class="stat-value">--%</span>
             </div>
             <div class="stat-item"><span class="stat-label">RAM:</span> <span id="val-ram" class="stat-value">--%</span>
@@ -242,8 +245,9 @@
                                 <button class="btn" onclick="runAction('reboot')">REBOOT</button>
                                 <button class="btn secondary" onclick="runAction('shutdown')">SHUTDOWN</button>
                                 <button class="btn" style="grid-column: span 2"
-                                    onclick="runAction('restore_hdmi')">SWITCH
-                                    TO HDMI (DISPLAY FIX)</button>
+                                    onclick="runAction('restore_hdmi')">SWITCH TO HDMI</button>
+                                <button class="btn" style="grid-column: span 2" onclick="switchToTFT()">SWITCH TO
+                                    TFT</button>
                             </div>
                         </div>
                     </div>
@@ -373,6 +377,8 @@
             <div class="panel-header" style="margin-bottom: 15px;">
                 <h2 id="log-viewer-title" style="font-size:0.9rem">MISSION LOG</h2>
                 <div style="display:flex; gap:10px">
+                    <button id="log-download-btn" class="btn" style="padding:5px 10px; font-size:0.7rem;">DOWNLOAD
+                        FULL</button>
                     <button class="btn" style="padding:5px 10px; font-size:0.7rem;"
                         onclick="closeLogViewer()">CLOSE</button>
                 </div>

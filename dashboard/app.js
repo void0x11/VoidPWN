@@ -397,6 +397,18 @@ async function runAction(action, data = {}) {
     }
 }
 
+async function switchToTFT() {
+    if (!confirm("This will switch video output to TFT via restore_hdmi.sh and REBOOT the device. Continue?")) return;
+
+    log('SWITCHING TO TFT OUTPUT...');
+    const res = await api('/api/action/tft', 'POST');
+    if (res.status === 'success') {
+        alert("System is rebooting to TFT mode. Please wait...");
+    } else {
+        alert("Failed to switch: " + res.error);
+    }
+}
+
 async function runScenario(scenario) {
     let target = state.selectedDevice ? state.selectedDevice.ip : null;
 
@@ -483,14 +495,25 @@ async function viewFullLog(filename, title) {
     const overlay = document.getElementById('log-viewer-overlay');
     const content = document.getElementById('log-viewer-content');
     const titleEl = document.getElementById('log-viewer-title');
+    const downloadBtn = document.getElementById('log-download-btn');
 
     titleEl.textContent = `MISSION LOG: ${title}`;
-    content.textContent = 'Loading logs...';
+    content.textContent = 'Loading last 2000 lines...';
+
+    // Setup download button
+    if (downloadBtn) {
+        downloadBtn.onclick = () => {
+            window.location.href = `/api/logs/download/${filename}`;
+        };
+    }
+
     overlay.classList.add('active');
 
     const res = await api(`/api/logs/view/${filename}`);
     if (res.content) {
         content.textContent = res.content;
+        // Scroll to bottom
+        setTimeout(() => content.scrollTop = content.scrollHeight, 100);
     } else {
         content.textContent = `Error: ${res.error || 'Failed to load log content.'}`;
     }
