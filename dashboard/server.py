@@ -621,7 +621,7 @@ def start_scan():
         subprocess.run(f"sudo rm -f {output_base}*", shell=True, stderr=subprocess.DEVNULL)
         
         # Start scan using wifi_tools.sh --scan (15 second scan)
-        cmd = f"{VOIDPWN_DIR}/scripts/network/wifi_tools.sh --scan"
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --scan"
         subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         SCAN_RUNNING = True
