@@ -246,7 +246,7 @@ The wireless assessment engine automates the 802.11 audit lifecycle:
 ---
 
 ## Legal & Ethical Compliance
-**VoidPWN is an authorized security research platform.** Use is permitted only on infrastructure where the operator has explicit, written authorization. All data gathered must be handled according to local data protection laws. The developers assume no liability for unauthorized or misuse of this software.
+**VoidPWN is security research platform.** Use is permitted only on infrastructure where the operator has explicit, written authorization. All data gathered must be handled according to local data protection laws. The developers assume no liability for unauthorized or misuse of this software.
 
 ---
 
