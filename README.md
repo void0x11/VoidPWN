@@ -270,12 +270,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## Project Roadmap
-- [ ] **AI-Driven Analytics**: Automated log synthesis and assessment suggestions.
-- [ ] **Node Clustering**: Multi-device orchestration for distributed environment audits.
-- [ ] **SDR Module**: Expansion into Sub-GHz and software-defined radio analysis.
-- [ ] **Evasion V2**: Advanced tunneling and traffic obfuscation for C2 stability.
-
----
-
 *This project is developed for authorized security assessments and educational purposes.*
