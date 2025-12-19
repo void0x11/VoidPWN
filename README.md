@@ -14,8 +14,6 @@
   <img src="https://img.shields.io/badge/Theme-Watch%20Dogs-cyan.svg" alt="Theme: Watch Dogs">
 </p>
 
-<h2 align="center">VOID_PWN // DedSec Tactical Arsenal</h2>
-
 <p align="center">
   <i>"Control is an illusion. We are the architects of the new reality."</i>
 </p>
