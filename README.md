@@ -13,6 +13,9 @@
   <img src="https://img.shields.io/badge/Style-Cyberpunk-magenta.svg" alt="Style: Cyberpunk">
   <img src="https://img.shields.io/badge/Theme-Watch%20Dogs-cyan.svg" alt="Theme: Watch Dogs">
 </p>
+<p align="center">
+  <img src="assets/Pi-Isometricv2.jpg" width="100%" alt="VoidPWN Hardware Isometric View">
+</p>
 
 <p align="center">
   <i>"Control is an illusion. We are the architects of the new reality."</i>
@@ -22,14 +25,13 @@
   <b>VoidPWN</b> is a high-latency, mobile-optimized C2 framework designed for <b>DedSec</b> field operations. It bypasses CtOS security layers by consolidating elite network discovery and wireless audit vectors into a single Raspberry Pi tactical unit.
 </p>
 
-
 ---
 
 ## 🏗️ System Architecture: The Tactical C2 Engine
 
 VoidPWN is engineered as a **Modular Offensive Orchestrator**, decoupling the high-level Command & Control (C2) interface from the low-level execution engines.
 
-### [ // FUNCTIONAL_LAYERS ]
+### [ FUNCTIONAL_LAYERS ]
 ```mermaid
 graph TB
     subgraph "Presentation & Control"
@@ -65,7 +67,7 @@ graph TB
     SVR --> SPI
 ```
 
-### [ // MISSION_LIFECYCLE_LOGIC ]
+### [ MISSION_LIFECYCLE_LOGIC ]
 How a single command (e.g., "Start Recon") traverses the system:
 
 ```mermaid
