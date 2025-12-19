@@ -35,8 +35,6 @@ VoidPWN provides a responsive, operator-centric web interface accessible across 
   <i>Synchronized operational dashboard demonstrating real-time attack telemetry and node management.</i>
 </p>
 
----
-
 ### 🛡️ Network Intel & Reconnaissance
 Deploy sophisticated **Nmap** profiles for rapid host discovery, service enumeration, and vulnerability mapping. Built-in OS fingerprinting and port discovery provide immediate situational awareness.
 <p align="center">
@@ -126,12 +124,8 @@ The intuitive HUD allows seamless switching between reconnaissance, active attac
 - **[Scenario Guide](./docs/SCENARIO_GUIDE.md)**: Automated workflow documentation.
 
 ### Technical Reference
-- **[API Reference](./docs/API_REFERENCE.md)**: REST API endpoints and schemas.
-- **[Architecture & API](./docs/TECHNICAL_REFERENCE.md)**: System internals and REST interface.
-- **[Attack Reference](./docs/ATTACK_REFERENCE.md)**: Complete attack vector catalog.
-
-### Development
-- **[Development Guide](./docs/DEVELOPMENT.md)**: Contributing and extending VoidPWN.
+- **[Architecture & Design](./docs/TECHNICAL_REFERENCE.md)**: System internals and component orchestration.
+- **[Attack Catalog](./docs/ATTACK_REFERENCE.md)**: Details on implemented attack vectors.
 
 ---
 
@@ -150,11 +144,6 @@ The intuitive HUD allows seamless switching between reconnaissance, active attac
 
 ## 🔒 Legal & Ethical Compliance
 **VoidPWN is an authorized security research platform.** Use is permitted only on infrastructure where the operator has explicit, written authorization. All data gathered must be handled according to local data protection laws. The developers assume no liability for unauthorized or misuse of this software.
-
----
-
-## 🤝 Contributing
-Contributions are welcome! Please see [DEVELOPMENT.md](./docs/DEVELOPMENT.md) for guidelines.
 
 ---
 
