@@ -1,65 +1,89 @@
-# Technical Operational Reference
+# 📟 OPERATION_MANUAL // VOID_PWN PLATFORM
 
-This document provides a low-level technical mapping of VoidPWN's core scripts and their corresponding CLI parameters. It is intended for advanced users requiring direct script execution or system customization.
-
----
-
-## 📡 Network Reconnaissance (`recon.sh`)
-
-The `recon.sh` script manages all Layer 3 and Layer 4 scanning operations.
-
-- **Fast Discovery**: `sudo ./recon.sh --quick <TARGET>`
-  - Executes: `nmap -sn <TARGET>`
-- **Full Enumeration**: `sudo ./recon.sh --full <TARGET>`
-  - Executes: `nmap -sV -sC -O -A -p- <TARGET>`
-- **Stealth Assessment**: `sudo ./recon.sh --stealth <TARGET>`
-  - Executes: `nmap -sS -T2 -f -D RND:10 <TARGET>`
-- **Vulnerability Check**: `sudo ./recon.sh --vuln <TARGET>`
-  - Executes: `nmap --script vuln <TARGET>`
-- **Web Fuzzing**: `sudo ./recon.sh --web <URL> [WORDLIST]`
-  - Executes: `gobuster dir -u <URL> -w [WORDLIST] -x php,html,txt,js`
+> **[ // SYSTEM_LOG ]**: This document outlines the operational methodologies for the VoidPWN hardware security platform. Intended for use by authorized security researchers and auditors.
 
 ---
 
-## 🎯 Wireless Assessment (`wifi_tools.sh`)
+## 🛰️ NETWORK_LOGIC: Infrastructure Assessment
 
-The `wifi_tools.sh` script handles monitor mode transition and Layer 2 assessment vectors.
+The `recon.sh` core is the primary system for mapping network boundaries and indentifying infrastructure assets.
 
-- **Interface Control**: 
-  - `sudo ./wifi_tools.sh --monitor-on` (Starts `airmon-ng`)
-  - `sudo ./wifi_tools.sh --monitor-off` (Stops `airmon-ng`)
-- **Handshake Interception**: `sudo ./wifi_tools.sh --handshake <BSSID> <CH>`
-  - Orchestrates `airodump-ng` and `aireplay-ng --deauth 10`.
-- **Clientless Capture**: `sudo ./wifi_tools.sh --pmkid [DURATION]`
-  - Executes `hcxdumptool` for specified duration.
-- **WPS PIN Recovery**: `sudo ./wifi_tools.sh --pixie <BSSID>`
-  - Executes `reaver` with Pixie-Dust entropy attack enabled (`-K 1`).
-- **MDK4 Stress Test**:
-  - `sudo ./wifi_tools.sh --beacon [FILE]` (Beacon flood)
-  - `sudo ./wifi_tools.sh --auth [BSSID]` (Association flood)
+### [ // ASSESSMENT_PROFILES ]
 
----
+| Profile | Interface Flag | Objective | Visibility |
+| :--- | :--- | :--- | :--- |
+| **QUICK_DISCOVERY** | `--quick` | Rapid host identification via ARP/ICMP. | HIGH |
+| **FULL_ENUMERATION** | `--full` | Comprehensive service & OS fingerprinting (-A). | VERY HIGH |
+| **STEALTH_ASSESS** | `--stealth` | Packet fragmentation & decoy IP injection. | **LOW** |
+| **VULN_AUDIT** | `--vuln` | Automated CVE NSE script execution. | MEDIUM |
 
-## 🤖 Workflow Automation (`scenarios.sh`)
-
-Scenarios provide pre-configured missions that chain multiple scripts and parameters.
-
-- **Tiered WiFi Audit**: `sudo ./scenarios.sh` (Manual Menu Option 1)
-  - Logic: Monitor ON -> 10m Airodump scan -> Target identification -> Sequential PMKID/Handshake attempts.
-- **Stealth Recon Mission**: `sudo ./scenarios.sh` (Manual Menu Option 4)
-  - Logic: Fragmentation + Timing T2 + Decoy scanning across specified target range.
-- **Web Application Hunt**: `sudo ./scenarios.sh` (Manual Menu Option 3)
-  - Logic: Port 80/443 discovery -> Technology identification (WhatWeb) -> Sequential GoBuster/Nikto/SQLMap audits.
+### [ // OPERATIONAL_CONSIDERATIONS ]
+- **Decoy Evasion**: When using `STEALTH_ASSESS`, its effectiveness depends on baseline network congestion. Excessive decoys on low-traffic subnets may trigger anomaly detection systems.
+- **Timing Profiles**: Timing `T2` is recommended for balanced accuracy and evasion. `T1` is often too slow for standard assessments, while `T3+` may trigger network security alerts.
 
 ---
 
-## ⚙️ System Architecture
+## 🎯 WIRELESS_LOGIC: Protocol Audit Suite
 
-### Dashboard Process Handling
-The Flask application (`server.py`) interacts with these scripts using `subprocess.Popen`. This allows for non-blocking execution where the UI receives the PID immediately, while the tool continues to stream output to the system logs.
+The `wifi_tools.sh` engine facilitates Layer 2 security assessments and protocol audits.
 
-### Inventory Synchronization
-Discovered hosts are persisted in `output/devices.json`. The dashboard uses asynchronous polling to refresh the inventory without requiring a page reload.
+### [ // ASSESSMENT_VECTORS ]
+
+*   **RF_INTERFACE_MANAGEMENT**: 
+    - Toggle using `--monitor-on` / `--monitor-off`.
+    - Manages driver states and terminates conflicting system processes.
+*   **HANDSHAKE_ACQUISITION**: 
+    - Analyzes the 4-way WPA handshake exchange.
+    - Utilizes controlled deauthentication frames to evaluate client re-association security.
+*   **PMKID_EXTRACTION**: 
+    - Passive capture of RSN IE hashes from the first exchange.
+    - **No client interaction required**. Ideal for low-profile security audits.
+*   **WPS_ENTROPY_ANALYSIS**: 
+    - Evaluation of random number generation in legacy WPS implementations.
+    - Demonstrates vulnerabilities in weak PIN generation logic.
+
+### [ // OPERATIONAL_CONSIDERATIONS ]
+- **Interface Stability**: Ensure the wireless adapter is not locked by other processes. If the interface reports "Device or resource busy," toggle the Monitor Mode state within the dashboard.
+- **Acquisition Reliability**: If active deauthentication fails to result in a handshake capture, it may indicate client distance issues or 802.11w (Management Frame Protection) implementation. Fall back to **PMKID_EXTRACTION** for passive analysis.
 
 ---
-*For comprehensive theoretical analysis and flag references, see the [Technical Reference](./docs/TECHNICAL_REFERENCE.md).*
+
+## 🤖 AUTOMATION_LOGIC: Workflow Orchestration
+
+Scenarios are pre-configured assessment sequences designed for standardized security testing.
+
+### [ // WORKFLOW_MODELS ]
+
+1.  **WIRELESS_AUDIT_SEQUENCE**:
+    - **Logic**: Automated monitor initialization -> Spectrum Scan -> Data acquisition.
+    - **Context**: Systematic auditing of local wireless infrastructure.
+2.  **SERVICE_ENUMERATION_SUITE**:
+    - **Logic**: Comprehensive port mapping -> Service identification -> Asset discovery.
+    - **Context**: Identification of unlinked web assets and service configurations.
+3.  **LOW_VISIBILITY_RECON**:
+    - **Logic**: Optimized timing profiles with packet fragmentation.
+    - **Context**: Assessments within environments utilizing active intrusion detection.
+
+### [ // OPERATIONAL_CONSIDERATIONS ]
+- **Automation Constraints**: Automated workflows are resource-intensive. For environments requiring high precision or minimal signal footprint, manual tool orchestration is recommended.
+
+---
+
+## ⚙️ System Interface & Telemetry
+
+### Telemetry Interpretation
+The **Live Interface** utilizes unbuffered I/O for real-time visibility. If minor rendering delays occur, it is due to the backend's real-time regex parsing and intelligence extraction. Do not refresh the interface during an active process to maintain the transient log buffer.
+
+### Process Termination
+If a background process becomes unresponsive, utilize the **GLOBAL_STOP** control. This initiates a system-wide `SIGKILL` to all associated assessment processes to ensure immediate system stability.
+
+### Intelligence Persistence
+Assessment data is persisted in the following directories:
+- `output/devices.json`: Cumulative host and device inventory.
+- `output/reports/`: Complete process logs and metadata.
+
+---
+
+> **[ // SYSTEM_STANDBY ]**: Ensure all interfaces are restored to managed mode after the assessment is concluded.
+
+*For deep technical flag references, see the [Technical Reference](./docs/TECHNICAL_REFERENCE.md).*

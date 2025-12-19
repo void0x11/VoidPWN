@@ -1,10 +1,10 @@
-# Network Reconnaissance Guide
+# 🛰️ NETWORK_INTEL // SYSTEM_INTELLIGENCE
 
-This document provides a technical operational guide for the network discovery and reconnaissance capabilities of VoidPWN. it maps dashboard actions to the underlying `scripts/network/recon.sh` execution logic.
+This document provides standardized operational protocols for the network discovery and reconnaissance capabilities of the VoidPWN platform.
 
 ---
 
-## 🛰️ Reconnaissance Methodologies
+## [ // ASSESSMENT_METHODOLOGIES ]
 
 ### 1. Asset Discovery (Quick Scan)
 - **Script Target**: `recon.sh --quick <TARGET>`
@@ -12,7 +12,7 @@ This document provides a technical operational guide for the network discovery a
   ```bash
   nmap -sn [target_subnet]
   ```
-- **Technical Logic**: Performs multiple discovery attempts using ICMP echo requests, TCP SYN to port 443, TCP ACK to port 80, and ICMP timestamp requests by default. For local subnets, it utilizes ARP-level discovery.
+- **System Logic**: Performs multiple discovery attempts using ICMP echo requests, TCP SYN to port 443, TCP ACK to port 80, and ICMP timestamp requests by default. For local subnets, it utilizes ARP-level discovery.
 
 ### 2. Full Service Discovery (Deep Scan)
 - **Script Target**: `recon.sh --full <TARGET>`
@@ -27,13 +27,13 @@ This document provides a technical operational guide for the network discovery a
   - `-A`: Enables OS detection, version detection, script scanning, and traceroute.
   - `-p-`: Scans every possible TCP port (1-65535).
 
-### 3. Stealth Reconnaissance
+### 3. Low-Visibility Reconnaissance
 - **Script Target**: `recon.sh --stealth <TARGET>`
 - **Internal Command**:
   ```bash
   nmap -sS -T2 -f -D RND:10 -oA [output] [target]
   ```
-- **Evasion Logic**:
+- **Detection Evasion Logic**:
   - `-sS (SYN Scan)`: Never completes the 3-way handshake, reducing log visibility on the target application layer.
   - `-T2 (Polite)`: Serializes port probes with a significant delay to evade rate-limiting IDS/IPS.
   - `-f (Fragmentation)`: Splits the IP header into multiple fragments to bypass simple stateless packet filters.
@@ -49,7 +49,7 @@ This document provides a technical operational guide for the network discovery a
 
 ---
 
-## 📊 Technical Flag Reference
+## [ // TECHNICAL_FLAG_REFERENCE ]
 
 | Flag | Category | Description |
 | :--- | :--- | :--- |

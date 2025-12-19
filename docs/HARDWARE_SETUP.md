@@ -1,33 +1,70 @@
-# Hardware Setup Guide
+# 🛠️ HARDWARE_SPECIFICATION // VOID_PWN PLATFORM
 
-This document provides detailed instructions for assembling and configuring the VoidPWN hardware platform.
-
----
-
-## 📋 Bill of Materials (BOM)
-
-### Required Components
-
-| Component | Model/Specification | Purpose | Approx. Cost |
-|-----------|---------------------|---------|--------------|
-| **Single Board Computer** | Raspberry Pi 4 Model B (4GB+ RAM) | Main processing unit | $55-75 |
-| **Display** | Waveshare 3.5" TFT LCD (480x320) | Portable interface | $15-25 |
-| **WiFi Adapter** | Alfa AWUS036ACH (RTL8812AU) | Monitor mode & injection | $40-50 |
-| **Storage** | 32GB+ microSD Card (Class 10/UHS-I) | Operating system & logs | $10-15 |
-| **Power Supply** | Official RPi 4 USB-C (5V/3A) | Stable power delivery | $8-12 |
-| **Case** | Raspberry Pi 4 case with fan | Cooling & protection | $10-15 |
-
-**Total Estimated Cost**: $138-192 USD
-
-### Optional Components
-- **Portable Battery**: 20,000mAh USB-C power bank (15W+ output)
-- **External Antenna**: High-gain WiFi antenna for extended range
-- **Ethernet Cable**: CAT5e/6 for wired network access
-- **USB Hub**: Powered USB 3.0 hub for multiple adapters
+This document provides detailed assembly schematics and configuration protocols for the VoidPWN mobile platform.
 
 ---
 
-## 🔧 Hardware Assembly
+## [ // BILL_OF_MATERIALS ]
+
+### Core Components
+
+| Component | Model/Specification | Technical Role | 
+| :--- | :--- | :--- |
+| **SBC** | Raspberry Pi 4 Model B (4GB+ RAM) | Primary compute module |
+| **TFT_DISPLAY** | Waveshare 3.5" LCD (480x320) | Local system interface |
+| **RF_ADAPTER** | Alfa AWUS036ACH (RTL8812AU) | Wireless auditing interface |
+| **STORAGE** | 32GB+ microSD Card (UHS-I) | System OS & Intelligence logging |
+| **POWER_UNIT** | Official RPi 4 USB-C (5V/3A) | Standard power supply |
+| **SYSTEM_CASE** | RPi 4 Case with Active Cooling | Thermal regulation |
+
+---
+
+## [ // HARDWARE_ASSEMBLY ]
+
+### System Interconnectivity
+
+```mermaid
+graph TD
+    subgraph "Core Processing"
+        RPi["Raspberry Pi 4B (4GB/8GB)"]
+        SD["microSD Card (OS/Intel)"]
+    end
+
+    subgraph "Hardware Interface"
+        TFT["3.5' TFT LCD (Waveshare)"]
+        Touch["Touch Input Matrix"]
+    end
+
+    subgraph "Wireless Interface"
+        Alfa["Alfa AWUS036ACH"]
+        Antenna["High-Gain Antennas"]
+    end
+
+    subgraph "Power Logic"
+        Power["5V/3A Power Source"]
+        Fan["5V Active Cooling Fan"]
+    end
+
+    RPi --- SD
+    RPi -- "GPIO 1-26 (SPI/Power)" --- TFT
+    TFT --- Touch
+    RPi -- "USB 3.0 (Data/Power)" --- Alfa
+    Alfa --- Antenna
+    Power -- "USB-C" --- RPi
+    RPi -- "GPIO 4/6 (5V/GND)" --- Fan
+```
+
+### Assembly Workflow
+
+```mermaid
+graph LR
+    Start([// START BUILD]) --> Preparation(Prep: Heat Sinks & Fan)
+    Preparation --> Mounting(Mount: TFT to GPIO 1-26)
+    Mounting --> Media(Insert: Pre-flashed microSD)
+    Media --> Connectivity(Conn: Alfa to USB 3.0)
+    Connectivity --> PowerOn(Power: System Initialization)
+    PowerOn --> Verify([// SYSTEM_READY])
+```
 
 ### Step 1: Raspberry Pi Preparation
 
@@ -140,18 +177,27 @@ wlan1mon  IEEE 802.11  Mode:Monitor  Frequency:2.457 GHz
 
 ### Step 4: Power Configuration
 
-#### 4.1 Desktop/Lab Setup
+#### 4.1 Stationary/Laboratory Setup
 - Use official Raspberry Pi 4 USB-C power supply (5V/3A)
-- Connect to wall outlet for sustained operations
+- Connect to standard outlet for sustained system analysis
 - Ensure power supply is rated for 15W continuous
 
-#### 4.2 Portable/Field Setup
+#### 4.2 Portable/Field Testing Setup
 - Use 20,000mAh+ USB-C power bank
 - Verify output: 5V/3A (15W minimum)
 - Recommended: Anker PowerCore or RAVPower models
-- Expected runtime: 4-6 hours with TFT + WiFi adapter
+- Expected runtime: 4-6 hours with TFT + wireless peripherals
 
 #### 4.3 Power Consumption Estimates
+
+```mermaid
+pie title [ // POWER_DISTRIBUTION_LOAD ]
+    "Idle (OS+TFT)" : 25
+    "Alfa Wireless Active" : 35
+    "CPU Load (Recon/Attacks)" : 30
+    "Thermal Management (Fan)" : 10
+```
+
 | Configuration | Power Draw | Battery Life (20,000mAh) |
 |---------------|------------|--------------------------|
 | Idle (TFT + WiFi) | ~8W | ~10 hours |
@@ -160,7 +206,7 @@ wlan1mon  IEEE 802.11  Mode:Monitor  Frequency:2.457 GHz
 
 ---
 
-## 🌐 Network Configuration
+## [ // NETWORK_CONFIGURATION ]
 
 ### WiFi Adapter Interface Names
 - **wlan0**: Built-in Raspberry Pi WiFi (management interface)
@@ -168,8 +214,8 @@ wlan1mon  IEEE 802.11  Mode:Monitor  Frequency:2.457 GHz
 - **wlan1mon**: Monitor mode interface (created by airmon-ng)
 
 ### Recommended Network Setup
-1. **Management Network**: Connect built-in WiFi (wlan0) to your network for dashboard access
-2. **Attack Interface**: Use Alfa adapter (wlan1) for penetration testing
+1. **Management Network**: Connect built-in WiFi (wlan0) for dashboard access
+2. **Assessment Interface**: Use Alfa adapter (wlan1) for security auditing
 3. **Ethernet**: Optional wired connection for stable dashboard access
 
 ### Accessing the Dashboard
@@ -196,7 +242,7 @@ ssh pi@raspberrypi.local
 
 ---
 
-## 🔍 Troubleshooting
+## [ // TROUBLESHOOTING ]
 
 ### TFT Display Issues
 
@@ -261,7 +307,7 @@ ssh pi@raspberrypi.local
 
 ---
 
-## 📊 Performance Optimization
+## [ // PERFORMANCE_OPTIMIZATION ]
 
 ### CPU Overclocking (Optional)
 Edit `/boot/config.txt`:
@@ -285,7 +331,7 @@ gpu_freq=750
 
 ---
 
-## 🔒 Security Hardening
+## [ // SECURITY_HARDENING ]
 
 ### Initial Setup
 ```bash
@@ -317,11 +363,11 @@ sudo systemctl restart ssh
 
 ---
 
-## 📦 Storage Management
+## [ // STORAGE_MANAGEMENT ]
 
 ### Log File Locations
-- **Attack Logs**: `/home/pi/VoidPWN/output/logs/`
-- **Captured Handshakes**: `/home/pi/VoidPWN/output/captures/`
+- **System Logs**: `/home/pi/VoidPWN/output/logs/`
+- **Captured Data**: `/home/pi/VoidPWN/output/captures/`
 - **Device Inventory**: `/home/pi/VoidPWN/output/devices.json`
 
 ### Disk Space Monitoring
@@ -335,7 +381,7 @@ find ~/VoidPWN/output/logs/ -type f -mtime +30 -delete
 
 ---
 
-## 🛡️ Maintenance
+## [ // SYSTEM_MAINTENANCE ]
 
 ### Regular Updates
 ```bash
@@ -364,4 +410,4 @@ sudo dd if=/dev/sdX of=voidpwn-image.img bs=4M status=progress
 
 ---
 
-*For software configuration and usage, see the [User Guide](../USER_GUIDE.md).*
+*For software configuration and usage, see the [Operation Manual](../USER_GUIDE.md).*

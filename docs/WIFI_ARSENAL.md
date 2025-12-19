@@ -1,10 +1,10 @@
-# Wireless Assessment Guide
+# 📶 WIRELESS_SECURITY // SYSTEM_PROTOCOL_SUITE
 
-This document provides a detailed technical reference for the Layer 2 wireless assessment features integrated into VoidPWN. It maps UI actions to the underlying `scripts/network/wifi_tools.sh` execution logic.
+This document provides a detailed technical reference for the Layer 2 wireless security assessment features integrated into the VoidPWN platform.
 
 ---
 
-## 📡 Wireless Assessment Methodologies
+## [ // WIRELESS_SECURITY_METHODOLOGIES ]
 
 ### 1. PMKID Clientless Capture
 - **Script Target**: `wifi_tools.sh --pmkid [duration]`
@@ -24,7 +24,7 @@ This document provides a detailed technical reference for the Layer 2 wireless a
   ```bash
   reaver -i wlan1mon -b AA:BB:CC:DD:EE:FF -K 1 -vv
   ```
-- **Logic**: Recovers the 8-digit WPS PIN, which is then used to query the WPA2 passphrase.
+- **System Logic**: Recovers the 8-digit WPS PIN, which is then utilized to query the WPA2 passphrase.
 
 ### 3. MDK4 Protocol Stress Testing
 - **Script Target**: `wifi_tools.sh --beacon` | `wifi_tools.sh --auth`
@@ -41,12 +41,12 @@ This document provides a detailed technical reference for the Layer 2 wireless a
   - Chained execution of `airodump-ng` (sniffing) and `aireplay-ng` (injection).
 - **Workflow**:
   1. Initialize sniffer: `airodump-ng -c [ch] --bssid [bssid] -w [output] wlan1mon`
-  2. Pulse Deauthentication: `aireplay-ng --deauth 10 -a [bssid] wlan1mon`
+  2. Trigger Disassociation Frames: `aireplay-ng --deauth 10 -a [bssid] wlan1mon`
 - **Requirement**: Requires at least one active client connection to satisfy the 4-way handshake exchange.
 
 ---
 
-## 🛠️ Operational Logic and Chaining
+## [ // SYSTEM_ORCHESTRATION_LOGIC ]
 
 VoidPWN manages the transition of Chipset states and data persistence automatically:
 

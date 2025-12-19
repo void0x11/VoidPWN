@@ -1,146 +1,105 @@
-# VoidPWN Feature Guide
+```
+# [ // SYSTEM_CAPABILITIES ]
+## [ // FEATURE_SPECIFICATION_INDEX ]
 
-This document provides comprehensive explanations of every feature available in the VoidPWN dashboard.
-
----
-
-## Table of Contents
-
-1. [Dashboard Overview](#dashboard-overview)
-2. [Network Interfaces](#network-interfaces)
-3. [WiFi Attacks](#wifi-attacks)
-4. [Network Reconnaissance](#network-reconnaissance)
-5. [Automated Scenarios](#automated-scenarios)
-6. [Reports System](#reports-system)
-7. [System Management](#system-management)
-8. [Device Inventory](#device-inventory)
-9. [Live HUD](#live-hud)
+This document provides a comprehensive technical overview of the VoidPWN platform's capabilities, detailing the underlying mechanisms and operational logic of each module.
 
 ---
 
-## Dashboard Overview
+## [ // TABLE_OF_CONTENTS ]
 
-The VoidPWN dashboard is a web-based interface accessible at `http://<PI_IP>:5000`. It provides centralized control over all penetration testing operations.
+1. [ // INTERFACE_OVERVIEW ](#dashboard-overview)
+2. [ // NETWORK_CONFIGURATION ](#network-interfaces)
+3. [ // WIRELESS_SECURITY_SUITE ](#wifi-attacks)
+4. [ // NETWORK_INTELLIGENCE ](#network-reconnaissance)
+5. [ // AUTOMATED_WORKFLOWS ](#automated-scenarios)
+6. [ // DATA_PERSISTENCE ](#reports-system)
+7. [ // SYSTEM_ADMINISTRATION ](#system-management)
+8. [ // HOST_INVENTORY ](#device-inventory)
+9. [ // MONITORING_INTERFACE ](#live-hud)
+
+---
+
+## [ // INTERFACE_OVERVIEW ]
+
+The VoidPWN management interface is a professional web-based platform designed for low-latency orchestration of security research and hardware assessments.
 
 ### Navigation Tabs
-- **INTERFACES**: Network interface management
-- **WIFI ATTACKS**: Wireless security assessment tools
-- **RECON**: Network reconnaissance and scanning
-- **SCENARIOS**: Automated multi-stage workflows
-- **REPORTS**: Operation logs and results
-- **SYSTEM**: Device configuration and maintenance
-
+- **INTERFACES**: System network interface management
+- **WIFI ATTACKS**: Wireless protocol security assessment tools
+- **RECON**: Network reconnaissance and service enumeration
+- **SCENARIOS**: Pre-configured automated security workflows
+- **REPORTS**: Persistent assessment logs and data export
+- **SYSTEM**: Platform configuration and hardware maintenance
 ### Header Controls
 - **STOP ALL**: Global kill switch for active attacks (red button, top-right)
 - **System Stats**: Real-time CPU, RAM, and disk usage monitoring
 
 ---
 
-## Network Interfaces
+## [ // NETWORK_CONFIGURATION ]
 
-**Location**: INTERFACES tab
+**Location**: `[ // INTERFACES ]` Tab
 
-### Purpose
-Manage network interfaces and configure monitor mode for wireless attacks.
+### [ // SYSTEM_PURPOSE ]
+Centralized orchestration of physical and logical network interfaces. This module manages the transition from standard system network connectivity to specialized "Monitor Mode" for packet capture and analysis.
 
-### Features
+### [ // CORE_TELEMETRY ]
 
-#### Interface Status Display
-Shows all available network interfaces with:
-- **Interface Name**: e.g., `wlan0`, `wlan1`, `eth0`
-- **IP Address**: Current IPv4 address
-- **MAC Address**: Hardware address
-- **Status**: UP/DOWN state
+#### 1. Interface Dynamics
+Displays real-time state of the hardware stack:
+- **Identifier**: Logical name (e.g., `wlan1`).
+- **Telemetry**: IP assignment, MAC signatures, and UP/DOWN state.
 
-#### Monitor Mode Control
-**What is Monitor Mode?**
-Monitor mode allows a wireless adapter to capture all WiFi traffic in range, not just traffic directed to it. This is essential for wireless attacks.
+#### 2. Monitor Mode (Packet Capture)
+Activates the `RTL8812AU` chipset's capability for raw 802.11 frame interception and analysis.
 
-**Buttons:**
-- **MONITOR ON**: Activates monitor mode on selected interface
-  - Creates `wlan1mon` interface
-  - Kills conflicting processes (NetworkManager, wpa_supplicant)
-  - Required before any WiFi attacks
+> [!IMPORTANT]
+> **MONITOR ON** initiates `airmon-ng check kill`, which will terminate `NetworkManager`. This disconnects the RPi from the management WiFi if it is using the same adapter.
 
-- **MONITOR OFF**: Deactivates monitor mode
-  - Restores normal managed mode
-  - Re-enables NetworkManager
-
-**Technical Details:**
+**System Logic:**
 ```bash
-# What happens when you click "MONITOR ON"
-sudo airmon-ng check kill
-sudo airmon-ng start wlan1
-# Creates: wlan1mon (monitor interface)
+# Logic for Monitor Mode Initialization
+sudo airmon-ng check kill   # Clear conflicting system processes
+sudo airmon-ng start wlan1  # Transition driver to Monitor Mode
+# Result: wlan1mon (High-Gain Analysis Interface)
 ```
 
 ---
 
-## WiFi Attacks
+## [ // WIRELESS_SECURITY_SUITE ]
 
-**Location**: WIFI ATTACKS tab
+**Location**: `[ // WIFI_ATTACKS ]` Tab
 
-### Network Scanning
+### [ // SPECTRUM_ANALYSIS ]
 
-#### REFRESH NETWORKS
-**Purpose**: Discover nearby WiFi access points
+#### REFRESH NETWORKS (Spectrum Scan)
+**Purpose**: Passive and active identification of BSSIDs within the 2.4/5GHz frequency bands.
 
-**What it does:**
-1. Puts adapter in monitor mode (if not already)
-2. Scans all WiFi channels (1-14 for 2.4GHz, 36-165 for 5GHz)
-3. Captures beacon frames from access points
-4. Displays results in a table
+**Information Harvested:**
+- **SSID/BSSID**: Logical and physical identifiers.
+- **CH/PWR**: Channel allocation and RSSI (Signal strength).
+- **ENC**: Encryption signatures (identifying weak WEP/WPA nodes).
 
-**Information Collected:**
-- **SSID**: Network name
-- **BSSID**: MAC address of access point
-- **Channel**: Operating frequency channel
-- **Signal**: Strength in dBm (e.g., -45 dBm = strong, -80 dBm = weak)
-- **Encryption**: Security type (WPA2, WPA3, WEP, Open)
-- **Clients**: Number of connected devices
+**Technical Note**: The scanner utilizes `airodump-ng` with `--band abg` to ensure comprehensive coverage across available 802.11 standard frequencies.
 
-**Technical Command:**
+---
+
+### [ // ASSESSMENT_METHODS ]
+
+#### 1. DEAUTH (Client Disassociation)
+**Objective**: Evaluate network resilience against authorized disassociation frames.
+
+**Technique**: Sends `802.11 deauthentication` packets targeting the client-AP relationship.
+
+> [!TIP]
+> **Operational Note**: Utilize disassociation frames to evaluate the security of client re-authentication workflows or to test rogue AP mitigation strategies.
+
+**System Command:**
 ```bash
-sudo airodump-ng --band abg --output-format csv wlan1mon
-```
-
-**Duration**: ~15 seconds
-
-### Attack Types
-
-#### 1. DEAUTH (Deauthentication Attack)
-
-**Purpose**: Disconnect clients from a WiFi network
-
-**How it works:**
-1. Sends spoofed deauthentication frames to clients
-2. Frames appear to come from the access point
-3. Clients disconnect and attempt to reconnect
-4. Useful for forcing handshake captures
-
-**Parameters:**
-- **Target**: Selected WiFi network (BSSID)
-- **Channel**: Locked to target's channel for reliability
-- **Count**: Continuous (0 = infinite loop)
-
-**Technical Details:**
-```bash
-# Channel locking (ensures reliable delivery)
-sudo iwconfig wlan1mon channel <TARGET_CHANNEL>
-
-# Aggressive deauth with driver workaround
+# Aggressive disassociation on target BSSID
 sudo aireplay-ng --deauth 0 -a <BSSID> --ignore-negative-one wlan1mon
 ```
-
-**Use Cases:**
-- Force WPA handshake capture
-- Test client reconnection behavior
-- Denial of service testing (authorized networks only)
-
-**Indicators of Success:**
-- Live HUD shows "Sending DeAuth packets"
-- Clients visible in airodump-ng output disappear
-- Handshake captured (if running simultaneously)
 
 #### 2. HANDSHAKE (WPA/WPA2 Handshake Capture)
 
@@ -155,13 +114,13 @@ sudo aireplay-ng --deauth 0 -a <BSSID> --ignore-negative-one wlan1mon
 
 **Technical Process:**
 ```bash
-# 1. Lock to target channel
+# 1. Lock interface to target frequency
 sudo iwconfig wlan1mon channel <CHANNEL>
 
-# 2. Start capture
+# 2. Initialize handshake capture
 sudo airodump-ng -c <CHANNEL> --bssid <BSSID> -w handshake wlan1mon
 
-# 3. Aggressive deauth (in parallel)
+# 3. Targeted disassociation (orchestrated in parallel)
 sudo aireplay-ng --deauth 10 -a <BSSID> --ignore-negative-one wlan1mon
 ```
 
@@ -182,25 +141,25 @@ Use captured handshake with:
 - **Hashcat**: GPU-accelerated cracking
 - **John the Ripper**: Advanced rule-based cracking
 
-#### 3. EVIL TWIN (Rogue Access Point)
+#### 3. AUTHORIZED ROGUE AP (System Simulation)
 
-**Purpose**: Create fake access point to intercept credentials
+**Purpose**: Evaluate client behavior when interacting with authorized rogue access point simulations.
 
 **How it works:**
-1. Creates rogue AP with same SSID as target
-2. Deauths clients from legitimate AP
-3. Clients connect to fake AP
-4. Captures credentials or serves phishing page
+1. Initialize authorized Rogue AP with target SSID
+2. Broadcast disassociation frames to legitimate AP
+3. Audit client connection behavior to the simulation
+4. Capture and analyze authentication credentials or serve research-based captive portals
 
 **Technical Implementation:**
 ```bash
-# 1. Lock to target channel
+# 1. Initialize simulation on target frequency
 sudo iwconfig wlan1mon channel <CHANNEL>
 
-# 2. Create fake AP
+# 2. Create authorized simulation AP
 sudo airbase-ng -c <CHANNEL> -e "<SSID>" wlan1mon
 
-# 3. Deauth legitimate clients (parallel process)
+# 3. System-initiated disassociation (concurrent process)
 sudo aireplay-ng --deauth 0 -a <REAL_BSSID> wlan1mon
 ```
 
@@ -209,48 +168,25 @@ sudo aireplay-ng --deauth 0 -a <REAL_BSSID> wlan1mon
 - **WPA2**: Requires credential capture
 - **Captive Portal**: Phishing page for password harvesting
 
-**Ethical Considerations:**
-- **ONLY** use on networks you own
-- Evil Twin attacks are highly illegal on unauthorized networks
-- Can be detected by WIDS/WIPS systems
+**Compliance & Guidelines:**
+- **ONLY** execute on infrastructure where explicit authorization has been granted.
+- Rogue AP simulations must be conducted within strict legal and organizational boundaries.
+- Detection by Enterprise WIDS/WIPS is expected during authorized testing.
 
-#### 4. PMKID (Clientless Handshake Capture)
+#### 4. PMKID (Passive Hash Acquisition)
+**Objective**: Acquire WPA2 hashes via the initial RSN IE exchange, enabling assessment without active client association.
 
-**Purpose**: Capture WPA/WPA2 hash without waiting for clients
+**Technical Advantage**: This is a clientless assessment method, requiring only the presence of an active Access Point.
 
-**How it works:**
-1. Sends association request to access point
-2. AP responds with PMKID in EAPOL frame
-3. PMKID can be cracked offline (like handshake)
-4. No clients required!
-
-**Technical Details:**
+**Directive:**
 ```bash
-# Capture PMKID using hcxdumptool
+# Capture Pulse via hcxdumptool
 sudo hcxdumptool -i wlan1mon -o pmkid.pcapng --enable_status=1
 ```
 
-**Advantages over Handshake:**
-- No clients needed
-- Faster capture (seconds vs. minutes)
-- Less detectable (no deauth packets)
+#### 5. WPS ENTROPY ANALYSIS (PIN Recovery)
 
-**Limitations:**
-- Not all routers support PMKID
-- Newer routers may have patched this vulnerability
-
-**Cracking PMKID:**
-```bash
-# Convert to hashcat format
-hcxpcapngtool -o pmkid.hash pmkid.pcapng
-
-# Crack with hashcat
-hashcat -m 16800 pmkid.hash wordlist.txt
-```
-
-#### 5. PIXIE DUST (WPS PIN Recovery)
-
-**Purpose**: Exploit weak WPS implementations to recover PIN
+**Purpose**: Analyze vulnerabilities in legacy WPS implementations to evaluate PIN generation security.
 
 **How it works:**
 1. Sends WPS exchange requests to router
@@ -270,13 +206,13 @@ sudo reaver -i wlan1mon -b <BSSID> -c <CHANNEL> -K 1 -vv
 - WPA PSK (password) recovered
 
 **Limitations:**
-- Only works on routers with WPS enabled
-- Requires vulnerable WPS implementation
-- Many modern routers have patched this
+- Applicable only to devices with legacy WPS protocols enabled.
+- Effectiveness depends on the presence of vulnerable firmware implementations.
+- Modern enterprise-grade access points typically incorporate mitigation for this vector.
 
-#### 6. WIFITE (Automated Wireless Auditing)
+#### 6. WIFITE (Automated Security Auditing)
 
-**Purpose**: Fully automated WiFi penetration testing
+**Purpose**: Systematic, automated wireless security assessments.
 
 **How it works:**
 1. Scans for all networks in range
@@ -305,362 +241,137 @@ sudo wifite --kill -i wlan1mon
 - Built-in cracking capabilities
 
 **Disadvantages:**
-- Less control over individual attacks
-- May be noisier (more detectable)
-- Slower than targeted attacks
+- Minimal granularity over individual assessment vectors.
+- Potential for increased system-to-network signal visibility.
+- Time-intensive due to systematic auditing of all identified targets.
 
 ---
 
-## Network Reconnaissance
+## [ // NETWORK_INTELLIGENCE ]
 
-**Location**: RECON tab
+**Location**: `[ // RECON ]` Tab
 
-### Scan Types
+### [ // ASSESSMENT_METHODS ]
 
-#### 1. QUICK SCAN (Host Discovery)
+#### 1. QUICK_SCAN (Asset Discovery)
+**Objective**: Rapid identification of active nodes on the target subnet.
+- **Mechanism**: ICMP Echo Requests + TCP SYN (443) + TCP ACK (80).
+- **Technical Speed**: Optimized for discovery efficiency (~10-30s).
 
-**Purpose**: Rapidly identify live hosts on network
+#### 2. FULL_SCAN (Deep Enumeration)
+**Objective**: Comprehensive intelligence gathering on a single target.
+- **Mechanism**: Version detection (`-sV`), Default Scripts (`-sC`), and OS Fingerprinting (`-O`).
+- **Telemetry**: Full service/version banners and potential exploit entry points.
 
-**Technical Command:**
+#### 3. STEALTH_SCAN (Low-Visibility Assessment)
+**Objective**: Execution of network assessment while minimizing interference with IDS/IPS systems.
+- **Mechanism**: SYN Stealth (`-sS`), Decoy IPs (`-D`), and Packet Fragmentation (`-f`).
+- **Technical Advantage**: Designed to minimize the system's visibility to stateless packet filters and standard monitoring systems.
+
+#### 4. VULNERABILITY_ASSESSMENT
+**Objective**: Systematic identification of known security vulnerabilities.
+- **Mechanism**: NSE (Nmap Scripting Engine) `vuln` script categories.
+- **Indicators**: Direct references to CVEs and criticality levels in the monitoring interface.
+
+#### 5. WEB_DIR_FUZZING (Hidden Path Discovery)
+**Objective**: Brute-force discovery of unlinked web directories and configuration files.
+- **Mechanism**: Dictionary-based fuzzing via `gobuster`.
+- **Target Assets**: Admin panels, backups (`.bak`), and environment files (`.env`).
+
+---
+
+## [ // AUTOMATED_WORKFLOWS ]
+
+**Location**: `[ // SCENARIOS ]` Tab
+
+### [ // WORKFLOW_ORCHESTRATION ]
+
+#### QUICK_CHECK (Rapid Assessment)
+**Objective**: 5-minute automated sweep of the local environment.
+- **Phase 1**: Host discovery on `/24` subnet.
+- **Phase 2**: Service enumeration on live nodes.
+- **Phase 3**: Vulnerability script execution.
+
+> [!TIP]
+> **Operational Note**: Automated workflows are ideal for standardized, hands-off data collection during security assessments.
+
+---
+
+## [ // DATA_PERSISTENCE ]
+
+**Location**: `[ // REPORTS ]` Tab
+
+### [ // ASSESSMENT_LOGS ]
+Centralized repository for all system output and captured security data.
+
+- **Dynamics**: Real-time status tracking (Running/Success/Failed).
+- **Exfiltration**: Direct access to raw `.cap`, `.pcapng`, and `.nmap` files for offline analysis.
+- **Log Management**: Automated truncation for UI stability, with full download capabilities for complete forensic trails.
+
+---
+
+## [ // SYSTEM_ADMINISTRATION ]
+
+**Location**: `[ // SYSTEM ]` Tab
+
+### [ // SYSTEM_CONTROLS ]
+lifecycle management for the physical unit.
+
+- **REBOOT / SHUTDOWN**: Controlled power management for hardware integrity.
+- **DISPLAY_CONFIGURATION**: Dynamic switching between the `[ TFT_INTERFACE ]` and the `[ HDMI_STATIONARY_INTERFACE ]`. Note: Requires system reboot for kernel-level driver initialization.
+
+---
+
+## [ // HOST_INVENTORY ]
+
+**Location**: Right Sidebar (Global Access)
+
+### [ // NETWORK_NODE_TRACKING ]
+Live database of identified nodes within the active assessment environment.
+
+- **Automated Host Discovery**: Real-time data from Nmap, Airodump, and ARP modules is automatically parsed and populated in the inventory.
+- **Device Profiling**: Automatic MAC OUI lookup for vendor identification and hostname resolution.
+- **Assessment Selection**: Researchers can select individual hosts to target specific assessment modules (scans/audits).
+
+---
+
+## [ // MONITORING_INTERFACE ]
+
+**Location**: Bottom Panel (Global Access)
+
+### [ // REAL_TIME_PROCESS_TELEMETRY ]
+The primary monitoring interface for live system activity.
+
+- **System Activity Stream**: Unified feed of stdout/stderr from active background processes.
+- **Color Logic**:
+    - `[✓] GREEN`: Process success / Achievement of objective.
+    - `[✗] RED`: Process error / Service interaction failure.
+    - `[?] WHITE`: Informational telemetry.
+- **Dynamic Scroll**: Automatically scrolls to provides most recent data updates.
+
+---
+
+## [ // SAFETY_&_TERMINATION_PROTOCOLS ]
+
+### STOP_ALL (Global Process Termination)
+**Objective**: Immediate termination of all active subprocesses and RF transmission.
+**Mechanism**:
 ```bash
-nmap -sn <TARGET>
-# -sn = Ping scan (no port scan)
-```
-
-**What it does:**
-- Sends ICMP echo requests (ping)
-- Sends TCP SYN to port 443
-- Sends TCP ACK to port 80
-- Sends ICMP timestamp request
-
-**Output:**
-- List of IP addresses that responded
-- MAC addresses (if on local network)
-- Vendor information (MAC OUI lookup)
-
-**Use Case**: Initial network mapping before deeper scans
-
-**Duration**: ~10-30 seconds for /24 subnet
-
-#### 2. FULL SCAN (Comprehensive Enumeration)
-
-**Purpose**: Deep analysis of target system
-
-**Technical Command:**
-```bash
-nmap -sV -sC -O -A -p- <TARGET>
-# -sV = Version detection
-# -sC = Default scripts
-# -O = OS detection
-# -A = Aggressive (enables OS, version, script, traceroute)
-# -p- = All 65535 ports
-```
-
-**What it detects:**
-- **Open Ports**: All TCP ports (1-65535)
-- **Service Versions**: e.g., "Apache 2.4.41"
-- **Operating System**: e.g., "Linux 5.4.0"
-- **Vulnerabilities**: Via NSE scripts
-- **Hostnames**: DNS reverse lookup
-
-**Duration**: 5-30 minutes (depends on target)
-
-**Example Output:**
-```
-PORT    STATE SERVICE VERSION
-22/tcp  open  ssh     OpenSSH 8.2p1 Ubuntu
-80/tcp  open  http    Apache httpd 2.4.41
-443/tcp open  ssl/http Apache httpd 2.4.41
-```
-
-#### 3. STEALTH SCAN (Evasion Techniques)
-
-**Purpose**: Avoid detection by IDS/IPS systems
-
-**Technical Command:**
-```bash
-nmap -sS -T2 -f -D RND:10 <TARGET>
-# -sS = SYN scan (half-open, stealthier)
-# -T2 = Slow timing (polite)
-# -f = Fragment packets
-# -D RND:10 = Use 10 random decoy IPs
-```
-
-**Evasion Techniques:**
-- **SYN Scan**: Doesn't complete TCP handshake
-- **Slow Timing**: Reduces detection probability
-- **Fragmentation**: Splits packets to evade filters
-- **Decoys**: Hides real source IP among fake IPs
-
-**Trade-offs:**
-- **Slower**: Can take hours for full scan
-- **Less Accurate**: Some services may not respond
-- **Stealthier**: Lower chance of triggering alerts
-
-#### 4. VULNERABILITY SCAN
-
-**Purpose**: Identify known security vulnerabilities
-
-**Technical Command:**
-```bash
-nmap --script vuln <TARGET>
-```
-
-**NSE Scripts Used:**
-- `http-vuln-*`: Web application vulnerabilities
-- `smb-vuln-*`: SMB/Windows vulnerabilities
-- `ssl-*`: SSL/TLS weaknesses
-
-**Common Vulnerabilities Detected:**
-- EternalBlue (MS17-010)
-- Heartbleed (OpenSSL)
-- Shellshock (Bash)
-- SQL injection points
-- Cross-site scripting (XSS)
-
-**Output Example:**
-```
-| smb-vuln-ms17-010:
-|   VULNERABLE:
-|   Remote Code Execution vulnerability in Microsoft SMBv1
-|     State: VULNERABLE
-|     Risk factor: HIGH
-```
-
-#### 5. WEB DIRECTORY FUZZING
-
-**Purpose**: Discover hidden files and directories on web servers
-
-**Technical Command:**
-```bash
-gobuster dir -u <URL> -w <WORDLIST> -x php,html,txt,js
-# -u = Target URL
-# -w = Wordlist path
-# -x = File extensions to check
-```
-
-**What it finds:**
-- Admin panels (`/admin`, `/wp-admin`)
-- Backup files (`/backup.zip`, `/db.sql`)
-- Configuration files (`/config.php`, `/.env`)
-- Hidden directories (`/uploads`, `/api`)
-
-**Wordlists Used:**
-- `/usr/share/wordlists/dirb/common.txt` (default)
-- `/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt` (comprehensive)
-
-**Example Output:**
-```
-/admin                (Status: 301) [Size: 312]
-/uploads              (Status: 200) [Size: 1024]
-/config.php.bak       (Status: 200) [Size: 4096]
-```
-
----
-
-## Automated Scenarios
-
-**Location**: SCENARIOS tab
-
-### Quick Check
-
-**Purpose**: 5-minute rapid network assessment
-
-**Workflow:**
-1. **Host Discovery** (30s)
-   - Ping scan on local subnet
-   - Identifies live hosts
-
-2. **Port Scan** (2m)
-   - Top 1000 ports on discovered hosts
-   - Service version detection
-
-3. **Vulnerability Check** (2m)
-   - NSE vuln scripts on open ports
-   - Identifies critical vulnerabilities
-
-**Output:**
-- List of live hosts with open ports
-- Identified services and versions
-- Critical vulnerabilities (if any)
-
-**Use Case**: Initial assessment before deeper testing
-
----
-
-## Reports System
-
-**Location**: REPORTS tab
-
-### Features
-
-#### Operations Summary Table
-Displays all completed and active operations:
-
-| Column | Description |
-|--------|-------------|
-| **TIME** | Timestamp of operation start |
-| **TYPE** | Attack/scan type (e.g., "WIFI (DEAUTH)") |
-| **TARGET** | SSID, IP, or network identifier |
-| **STATUS** | Running, Completed, Failed |
-| **FULL OUTPUT** | Button to view detailed logs |
-
-#### Log Viewer
-- **Truncated Display**: Shows last 2000 lines for performance
-- **Download Full**: Button to download complete log file
-- **Syntax Highlighting**: Color-coded output for readability
-
-#### Report Optimization
-- **No Horizontal Scroll**: Table fits screen width
-- **Full-Width Layout**: Sidebar hidden on Reports page
-- **Vertical Scroll**: Allows browsing long operation lists
-
----
-
-## System Management
-
-**Location**: SYSTEM tab
-
-### Maintenance Controls
-
-#### REBOOT
-- Restarts Raspberry Pi
-- Useful after driver updates or configuration changes
-
-#### SHUTDOWN
-- Powers down Raspberry Pi safely
-- Prevents SD card corruption
-
-#### SWITCH TO HDMI
-- Runs `restore_hdmi.sh` script
-- Switches display output from TFT to HDMI
-- Automatically reboots
-
-#### SWITCH TO TFT
-- Runs `install_lcd.sh` script
-- Switches display output from HDMI to TFT
-- Automatically reboots
-- **Note**: No confirmation prompt (runs immediately)
-
----
-
-## Device Inventory
-
-**Location**: Right sidebar (all tabs except Reports)
-
-### Purpose
-Tracks discovered devices for easy targeting
-
-### Features
-
-#### Automatic Discovery
-Devices are automatically added when discovered via:
-- Network scans (Nmap)
-- WiFi scans (Airodump-ng)
-- ARP scans
-
-#### Device Information
-Each device shows:
-- **IP Address**: IPv4 address
-- **MAC Address**: Hardware address
-- **Hostname**: Resolved DNS name (if available)
-- **Vendor**: Manufacturer (from MAC OUI)
-- **Open Ports**: Discovered services
-
-#### Device Selection
-- Click device card to select as target
-- Selected device highlighted in purple
-- Used for targeted attacks and scans
-
-#### Metadata Management
-- **Notes**: Add custom notes to devices
-- **Tags**: Categorize devices (e.g., "server", "IoT", "critical")
-- **CLEAR**: Remove all devices from inventory
-
----
-
-## Live HUD
-
-**Location**: Bottom panel (all tabs)
-
-### Purpose
-Real-time monitoring of attack progress and system events
-
-### Features
-
-#### Log Streaming
-- **Real-time Updates**: Logs appear as attacks execute
-- **Color Coding**:
-  - 🟢 Green: Success messages
-  - 🔴 Red: Errors and critical events
-  - ⚪ White: Informational messages
-
-#### Log Types
-- **Attack Progress**: "Sending DeAuth packets...", "Handshake captured!"
-- **System Events**: "Monitor mode enabled", "Scan completed"
-- **Errors**: "Failed to start attack", "Target not selected"
-
-#### Auto-Scroll
-- Automatically scrolls to newest log entry
-- Shows most recent 50 entries
-- Older logs available in Reports tab
-
----
-
-## Advanced Features
-
-### Stop All Attacks
-
-**Location**: Header (red button, top-right)
-
-**Purpose**: Emergency kill switch for all active operations
-
-**What it stops:**
-- `aireplay-ng` (deauth attacks)
-- `airodump-ng` (packet captures)
-- `airbase-ng` (evil twin)
-- `wifite` (automated auditing)
-- `nmap` (network scans)
-- `reaver` (WPS attacks)
-- `bettercap` (MITM attacks)
-
-**Technical Implementation:**
-```bash
-# Kills all attack processes
+# Global Termination Sequence
 sudo killall aireplay-ng airodump-ng airbase-ng wifite nmap reaver bettercap
 ```
 
-**Use Cases:**
-- Accidentally started wrong attack
-- Need to quickly stop all operations
-- Emergency shutdown before disconnecting
-
 ---
 
-## Best Practices
+## [ // PROFESSIONAL_OPERATIONAL_GUIDELINES ]
 
-### Target Selection
-1. Always select target before starting attack
-2. Verify target SSID/IP in confirmation
-3. Use Device Inventory for organized targeting
+### [ // ASSESSMENT_SUCCESS_FACTORS ]
 
-### Attack Monitoring
-1. Watch Live HUD for progress indicators
-2. Check Reports tab for detailed output
-3. Download logs for offline analysis
-
-### Resource Management
-1. Stop attacks when complete (don't leave running)
-2. Clear old reports periodically
-3. Monitor disk space (logs can grow large)
-
-### Security
-1. Only test authorized networks
-2. Document all testing activities
-3. Secure captured handshakes/credentials
-4. Delete sensitive data after testing
+1. **Target Verification**: Always confirm target identification in the `[ // HOST_INVENTORY ]` before initiating active security assessments.
+2. **Persistence Management**: Periodically archive old logs to maintain filesystem health and performance.
+3. **Thermal Monitoring**: Monitor the `[ // MONITORING_INTERFACE ]` for system load during sustained wireless auditing to prevent hardware throttling.
+4. **Data Validation**: Ensure all captured security artifacts are verified for integrity before conducting offline analysis.
 
 ---
-
 *For technical implementation details, see [Technical Reference](./TECHNICAL_REFERENCE.md).*
 *For hardware setup, see [Hardware Setup Guide](./HARDWARE_SETUP.md).*

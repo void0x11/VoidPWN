@@ -1,102 +1,100 @@
-# VoidPWN Technical Reference
+# 🛠️ VOID_PWN // TECHNICAL_REFERENCE
 
-This document provides a low-level technical mapping of the VoidPWN platform's automation logic, from dashboard API endpoints to backend shell script execution.
-
----
-
-## 1. Wireless Operations (`wifi_tools.sh`)
-
-All wireless actions are orchestrated by `scripts/network/wifi_tools.sh`. The dashboard interfaces with this script via the following parameters.
-
-### Monitor Mode Control
-- **Logic**: Uses `airmon-ng` to terminate conflicting processes (NetworkManager, wpa_supplicant) and switch the wireless chipset to monitor state.
-- **Commands**:
-  - Enable: `airmon-ng start <iface>` or `iwconfig <iface> mode monitor` (fallback).
-  - Disable: `airmon-ng stop <iface>mon` and `systemctl restart NetworkManager`.
-
-### PMKID Capture
-- **Endpoint**: `/api/wifi/pmkid`
-- **Execution**: `sudo ./wifi_tools.sh --pmkid [duration]`
-- **Internal Command**: `timeout [duration] hcxdumptool -o [output.pcapng] -i [monitor_iface] --enable_status=1`
-- **Implementation Note**: Exploits the RSN IE field. Captured hashes are stored in `output/captures/` and must be converted using `hcxpcapngtool` for cracking.
-
-### WPS Pixie-Dust
-- **Endpoint**: `/api/wifi/pixie`
-- **Execution**: `sudo ./wifi_tools.sh --pixie <BSSID>`
-- **Internal Command**: `reaver -i [monitor_iface] -b [BSSID] -K 1 -vv`
-- **Logic**: Exploits low-entropy nonces in the WPS exchange to recover the PIN offline.
-
-### MDK4 Attack Vectors
-- **Beacon Flood**: 
-  - Execution: `sudo ./wifi_tools.sh --beacon [ssid_file]`
-  - Command: `mdk4 [iface] b [-f ssid_file]`
-- **Auth Flood**:
-  - Execution: `sudo ./wifi_tools.sh --auth [BSSID]`
-  - Command: `mdk4 [iface] a [-a BSSID]`
+This document provides a technical deep-dive into the VoidPWN system architecture, mapping internal API logic to binary execution and the data persistence layer.
 
 ---
 
-## 2. Network Reconnaissance (`recon.sh`)
+## 1. Asynchronous System Orchestration
 
-Reconnaissance actions are executed via `scripts/network/recon.sh`.
+VoidPWN operates as a **Threaded Command-and-Control (C2) Orchestrator**. Designed for efficiency, it utilizes unbuffered I/O to provide real-time process telemetry.
 
-### Host Discovery (Quick Scan)
-- **Endpoint**: `/api/recon/quick`
-- **Execution**: `sudo ./recon.sh --quick <target>`
-- **Command**: `nmap -sn <target>`
-- **Logic**: Performs an ARP scan (if local) or ICMP echo request (if remote) to map active hosts without port scanning.
-
-### Service Enumeration (Full Scan)
-- **Endpoint**: `/api/recon/full`
-- **Execution**: `sudo ./recon.sh --full <target>`
-- **Command**: `nmap -sV -sC -O -A -p- -oA [output] <target>`
-- **Flags**:
-  - `-sV`: Version detection.
-  - `-sC`: Default script scanning (NSE).
-  - `-O`: Operating System detection.
-  - `-A`: Aggressive mode (combines -O, -sV, -sC, and traceroute).
-  - `-p-`: Scan all 65,535 ports.
-
-### Stealth Reconnaissance
-- **Endpoint**: `/api/recon/stealth`
-- **Execution**: `sudo ./recon.sh --stealth <target>`
-- **Command**: `nmap -sS -T2 -f -D RND:10 -oA [output] <target>`
-- **Logic**:
-  - `-sS`: TCP SYN scan (half-open).
-  - `-T2`: Polite timing to avoid IDS thresholds.
-  - `-f`: Packet fragmentation to bypass simple firewalls.
-  - `-D RND:10`: Generates 10 random decoy IP addresses.
+### [ // PROCESS_MANAGEMENT ]
+- **Core Engine**: `dashboard/server.py`
+- **Execution Mechanism**: `subprocess.Popen` with `stdbuf -oL -eL`.
+- **Threading Model**: 
+  - **The Producer**: `capture()` thread reads `proc.stdout` line-by-line.
+  - **The Consumer**: `add_live_log()` appends to a `collections.deque(maxlen=1000)` for O(1) rotation efficiency.
+- **Logic**: 
+  - Using `stdbuf` (Standard Buffer) forces the underlying binaries (`nmap`, `airodump-ng`, `wifite`) to flush their `stdout` line-by-line rather than filling their internal memory buffers.
+  - This allows the **Live HUD** to display progress percentages and scan artifacts as they occur, rather than after the process terminates.
 
 ---
 
-## 3. Automation Scenarios (`scenarios.sh`)
+## 2. Security Assessment Lifecycle: Data Path Detail
 
-Scenarios are multi-stage workflows orchestrated by `scripts/network/scenarios.sh`.
+A high-level technical trace of a security assessment action:
 
-### Wireless Audit Workflow
-1.  **Preparation**: Calls `wifi_tools.sh --monitor-on`.
-2.  **Discovery**: Executes `timeout [duration] airodump-ng -w [output] --output-format csv [iface]`.
-3.  **Process Integration**: The script parses the CSV output to identify high-signal targets for subsequent capture attempts.
-
-### Web Service Assessment Workflow
-1.  **Scanning**: `nmap -p 80,443,8080 --open [network]`.
-2.  **Fingerprinting**: Executes `WhatWeb` against discovered IPs.
-3.  **Enumeration**: Automated `GoBuster` directory fuzzing:
-    - `gobuster dir -u [url] -w /usr/share/wordlists/dirb/common.txt`
-4.  **Vulnerability Audit**: Targeted Nikto and SQLMap execution:
-    - `nikto -h [url]`
-    - `sqlmap -u [url] --batch --crawl=2`
+1.  **Trigger**: The frontend issues a `fetch()` POST request to `/api/wifi/deauth`.
+2.  **Orchestration**: `server.py` validates parameters and spawns the `wifi_tools.sh` subprocess.
+3.  **Capture & Audit**:
+    - A dedicated thread hooks the process `stdout`.
+    - Each line passes through `parse_inventory_info()` for regex-based host discovery.
+    - Identified nodes are pushed to `device_manager.add_device()`, which persists to `output/devices.json`.
+4.  **Interface Stream**: The log line is appended to `LIVE_LOGS`. The frontend polls `/api/logs` to render the unbuffered data stream.
+5.  **Finalization**: Upon process termination, `reporter.update_status()` transitions the assessment from "Running" to "Completed".
 
 ---
 
-## 4. Backend Architecture (`server.py`)
+## 3. Real-time Intelligence Extraction (Regex Heuristics)
 
-### Process Management
-The dashboard uses the `subprocess` module to manage long-running background tasks.
-- **Method**: `subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)`
-- **Thread Handling**: Each attack or scan is spawned as an independent process. The dashboard captures the PID to track status and allows for manual termination via the UI.
+The system analyzes all incoming process telemetry through a Regex-based heuristic engine to automatically map the network environment.
 
-### Data Storage
-- **`output/devices.json`**: Acts as the primary state store for host discovery.
-- **`output/reports/`**: Root directory for all generated logs, capture files, and Nmap XML/GNMAP results.
-- **XML Parsing**: The dashboard utilizes `xml.etree.ElementTree` to parse Nmap XML outputs and extract service metadata for the UI inventory.
+### [ // INTEL_EXTRACTION_SCHEMA ]
+| Target Type | Regex Pattern Logic | Extraction Script |
+| :--- | :--- | :--- |
+| **IP_ADDRESS** | `[\\d\\.]+` (contextualized by Nmap headers) | `parse_inventory_info` |
+| **HOSTNAME** | `for (.*) \\((.*)\\)` | `parse_inventory_info` |
+| **MAC_VENDOR** | OUI Database Lookup | `DeviceManager` |
+| **OPEN_PORTS** | `(\\d+)/(tcp|udp)\\s+open` | `ElementTree` XML Parser |
+
+---
+
+## 4. Wireless Security Engine (`wifi_tools.sh`)
+
+### [ // MONITOR_MODE_LIFECYCLE ]
+- **Initialization**: `airmon-ng check kill` -> `airmon-ng start <iface>`.
+- **Termination**: `airmon-ng stop <iface>mon` -> `systemctl restart NetworkManager`.
+- **Fallback**: Uses `iwconfig` and `ip link` for chipsets that utilize older `nl80211` drivers.
+
+### [ // PMKID_ASSESSMENT_VECTOR ]
+- **Command**: `timeout [duration] hcxdumptool -o [pcapng] -i [iface] --enable_status=1`
+- **Technical Note**: This is a clientless method targeting the RSN Robust Security Network Association. It eliminates the need for active deauthentication frames, significantly reducing the system's signal footprint and minimizing network disruption.
+
+---
+
+## 5. Network Reconnaissance Engine (`recon.sh`)
+
+### [ // PERFORMANCE_PROFILES ]
+- **Level 4/5 (Aggressive)**: Optimized for rapid mapping within a known network range.
+- **Stealth (T2/Fragmentation)**: Splits IP headers to bypass stateful packet inspection (SPI) and reduces inter-probe intervals to evade threshold-based IDS alerts.
+
+| Flag | Technical Purpose |
+| :--- | :--- |
+| `-sS` | Stealth SYN Scan (Half-open) |
+| `-f` | Segmented packet headers |
+| `-D RND:10` | Decoy traffic generation (IP Spoofing) |
+
+---
+
+## 6. Hardware Interfacing & SPI Framing
+
+VoidPWN manages dual output modalities through kernel-level display switching.
+
+### [ // DISPLAY_LOGIC ]
+- **Drivers**: Based on `LCD-show` (Waveshare 3.5" TFT).
+- **Orchestration**:
+  1. **TFT_MODE**: Configures `/boot/config.txt` for SPI clock speed (32MHz) and initializes `fbcp` to mirror the primary framebuffer.
+  2. **HDMI_MODE**: Reverts drivers to standard HDMI output and stops the `fbcp` daemon.
+
+---
+
+## 7. Persistence & Data Integrity
+
+- **Reports**: Stored in `output/reports/` with a UUID-based indexing in `reports.json`.
+- **Captures**: Handshakes conserved in raw `.cap` and `.pcapng` formats, ready for high-performance cracking (Hashcat/John).
+
+---
+
+> **[ // DOCUMENTATION_END ]**: Authorized security research use only.
+
+*For user-level operational workflows, see the [Operation Manual](../USER_GUIDE.md).*

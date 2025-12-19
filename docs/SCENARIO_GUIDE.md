@@ -1,10 +1,10 @@
-# Scenario Automation Guide
+# 🤖 AUTOMATED_WORKFLOWS // SYSTEM_ORCHESTRATION
 
-Automated scenarios in VoidPWN coordinate multiple security tools into single-click workflows. This document details the step-by-step orchestration logic used in `scripts/network/scenarios.sh`.
+Automated scenarios in VoidPWN coordinate multiple security tools into single-click workflows.
 
 ---
 
-## 🛠️ Scenario Orchestration Logic
+## [ // WORKFLOW_ORCHESTRATION_LOGIC ]
 
 ### 1. Wireless Security Audit
 - **Objective**: Sequential assessment of all local BSSIDs.
@@ -20,7 +20,7 @@ Automated scenarios in VoidPWN coordinate multiple security tools into single-cl
 - **Workflow Steps**:
   1.  **SYN Probing**: `nmap -sS -T2 -f --data-length 25 -D RND:10 [target]`. Uses 25-byte data padding and 10 random decoys.
   2.  **Service Fingerprinting**: Slow interrogation using `nmap -sV -T1 --version-intensity 0 [target]`. 
-  3.  **Encapsulation**: The entire workflow is executed within a detached process, allowing the operator to terminate the session without interrupting the scan.
+  3.  **Encapsulation**: The entire workflow is executed within a detached process, allowing the researcher to terminate the local session without interrupting the background scan process.
 
 ### 3. Web Service Intelligence
 - **Objective**: Full-stack audit of HTTP/HTTPS services.
@@ -35,9 +35,9 @@ Automated scenarios in VoidPWN coordinate multiple security tools into single-cl
 
 ---
 
-## 📊 Comparison Matrix
+## [ // WORKFLOW_COMPARISON_MATRIX ]
 
-| Scenario Profile | Key Tools Chained | Orchestration Logic |
+| Workflow Profile | Key Tools Chained | Orchestration Logic |
 | :--- | :--- | :--- |
 | **Wireless Audit** | airodump, hcxdumptool, aireplay-ng | Signal-priority loop |
 | **Stealth Recon** | nmap (Evasive flags) | Polite timing + False decoys |

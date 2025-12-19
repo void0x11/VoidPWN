@@ -1,58 +1,80 @@
-# System Interface Manual
+# [ // INTERFACE_MANUAL ] 
+## [ // REAL-TIME_MONITORING_FRAMEWORK ]
 
-This manual provides a technical overview of the VoidPWN Head-Up Display (HUD) and its integration with the Python backend.
-
----
-
-## 🏗️ Technical Architecture
-
-The HUD is a single-page application (SPA) built with Vanilla JavaScript, interfacing with a Flask REST API.
-
-- **Frontend Core**: `app.js` manages state, UI rendering, and asynchronous API polling.
-- **Backend Core**: `server.py` handles route definitions and executes shell scripts via the `subprocess` module.
-- **Data Flow**:
-  1. UI Action (e.g., Click 'Scan') -> `fetch('/api/recon/quick')`.
-  2. Backend starts `recon.sh` -> returns JSON with task PID.
-  3. UI polls `/api/reports` -> updates live console container.
+This manual provides a technical overview of the VoidPWN Real-time Monitoring Interface, mapping its telemetry systems to the asynchronous system backend.
 
 ---
 
-## 🧭 Operational Modules
+## [ // ARCHITECTURE_FLOW ]
 
-### 1. System Console & Metrics
-- **Resource Monitoring**: `app.js` polls `/api/system/stats` every 2 seconds. The backend retrieves data using the `psutil` library.
-- **Interface Verification**: Displays the status of `wlan1mon` by parsing the output of `iwconfig`.
+The interface functions as a professional Single-Page Application (SPA) designed for low-latency system updates.
 
-### 2. Radar and Global Inventory
-- **Asset Discovery**: Triggering a scan executes `nmap -oX output.xml`. 
-- **Data Parsing**: `server.py` utilizes `xml.etree.ElementTree` to parse the Nmap XML, extracting hostnames, IPv4 addresses, and open ports. These are persisted in `output/devices.json`.
-- **Target Selection**: Selecting an inventory item updates the global `activeTarget` object in `app.js`. This object is automatically passed as a parameter in subsequent POST/GET requests to the API.
-
-### 3. Tactical Assessment Tabs
-- **NETWORK**: Interfaces with `recon.sh` for Layer 3/4 scans.
-- **WIFI**: Interfaces with `wifi_tools.sh` for Layer 2 assessments.
-- **SCENARIOS**: Triggers high-level shell orchestration in `scenarios.sh`.
-
-### 4. Direct Process Monitoring
-The centralized console provides a real-time stream of background activity.
-- **Live Output**: `app.js` reads from the `/api/reports/live` endpoint, which streams the last 50 lines of the active tool's log file using `tail -n 50`.
-
-### 5. Reporting and Exfiltration
-The **REPORTS** tab provides direct access to the `output/` directory structure.
-- **Metadata**: Each report entry displays the command executed, start time, and status (Running/Success/Failed).
-- **Blob Access**: Direct links allow for the retrieval of `.cap`, `.pcapng`, and `.nmap` files generated during assessments.
+```mermaid
+sequenceDiagram
+    participant Researcher as [ INTERFACE_UI ]
+    participant Core as [ SYSTEM_CORE ]
+    participant Engine as [ EXECUTION_ENGINE ]
+    
+    Researcher->>Core: POST /api/assessment/start {cmd}
+    Core->>Engine: Threaded Popen (stdbuf)
+    Engine-->>Core: Raw STDOUT Stream
+    Core->>Core: Regex Heuristics (parse_inventory)
+    Core-->>Researcher: SSE/Polling /api/logs/live
+    Researcher->>Researcher: Render SYSTEM_LOG + INVENTORY_UPDATE
+```
 
 ---
 
-## ⌨️ Input and Interaction
+## [ // UI_ELEMENT_MAPPING ]
 
-### Virtual Keyboard Implementation
-- Built using native DOM events, the keyboard intercepts Focus events on `input` and `textarea` elements. It injects characters directly into the `value` property of the target element, ensuring compatibility with touch-based TFT displays.
+### 1. LIVE_SYSTEM_LOG (Terminal)
+The primary system feed displaying raw process telemetry.
+- **Backend Source**: `LIVE_LOGS` (circular `collections.deque` buffer).
+- **Update Frequency**: Real-time push as lines are captured.
+- **Status Indicators**:
+    - `[✓] SUCCESS`: Process objectives complete.
+    - `[✗] ERROR`: Subprocess failure or interface error.
+    - `[!] ALERT`: Potential resource exhaustion or signal degradation.
 
-### UI Status Mapping
-- **Active (Green)**: Process ID is present in the backend's active task list.
-- **Warning (Yellow)**: Backend reported a non-zero exit code or stderr activity.
-- **Identified (Red)**: NSE script output contains "VULNERABLE" or "CRITICAL" strings.
+### 2. HOST_INVENTORY (Device List)
+Live tracking of identified network nodes.
+- **Backend Source**: `DeviceManager` persistence (`devices.json`).
+- **Trigger**: Updated by `parse_inventory_info()` whenever Nmap or ARP logs are detected in the stream.
+- **Attributes**: IPv4, Hostname, MAC Address, Vendor ID.
+
+### 3. SYSTEM_RESOURCE_MONITOR (System Metrics)
+Real-time hardware performance metrics.
+- **CPU_LOAD**: `psutil.cpu_percent()` - Monitors computational overhead.
+- **RAM_USAGE**: `psutil.virtual_memory()` - Ensures persistence buffer stability.
+- **TEMP_SYNC**: Monitors thermal levels during heavy WiFi injection.
+
+### 4. MODULE_CONTROL_VECTORS (Control Vectors)
+- **[ // NETWORK ]**: Interface for `recon.sh` (Network Assessment).
+- **[ // WIFI ]**: Interface for `wifi_tools.sh` (Wireless Auditing).
+- **[ // SCENARIOS ]**: High-level orchestration for automated security workflows.
+
+---
+
+## [ // TELEMETRY_SYNCHRONIZATION ]
+
+The interface synchronizes its state based on the **Assessment Lifecycle**:
+
+| Assessment State | Visual Indicator | Data Source |
+| :--- | :--- | :--- |
+| **INITIALIZING** | Pulse Animation (Yellow) | Subprocess initialization |
+| **ACTIVE_PROCESS** | Scanning Animation (Green) | `proc.poll() is None` |
+| **DATA_IDENTIFIED** | Item Update (White) | `parse_inventory_info()` |
+| **COMPLETE** | Static Display (Green) | `proc.wait()` exit 0 |
+| **FAILED** | Warning Indicator (Red) | Exit code > 0 |
+
+---
+
+## [ // INPUT_VECTORS ]
+
+### VIRTUAL_INPUT_SUBSYSTEM
+Interfaces with the terminal emulator for command input without external peripherals.
+- **Logic**: Native DOM event interception.
+- **Compatibility**: Optimized for the 3.5" resistive touch matrix.
 
 ---
 *For direct script parameter definitions, refer to the [Technical Reference](./TECHNICAL_REFERENCE.md).*
