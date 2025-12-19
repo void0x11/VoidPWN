@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/Gemini_Generated_Image_ubqnxrubqnxrubqn_v2.png" width="100%" alt="VoidPWN Logo">
+  <img src="assets/Gemini_Generated_Image_ubqnxrubqnxrubqn.png" width="100%" alt="VoidPWN Logo">
 </p>
 
 <p align="center">
