@@ -21,7 +21,7 @@
 ---
 
 <p align="center">
-  <img src="assets/Pi-Isometric.jpg" width="800" alt="VoidPWN Hardware Controller">
+  <img src="assets/wifi-attacks.jpg" width="800" alt="VoidPWN Hardware Controller">
 </p>
 
 ---
@@ -30,9 +30,9 @@
 VoidPWN provides a responsive, operator-centric web interface accessible across your entire tactical stack. Control your mission from a **Raspberry Pi TFT**, a **Workstation**, or a **Mobile Device** with real-time synchronization.
 
 <p align="center">
-  <img src="assets/attack.png" width="90%" alt="Desktop Dashboard View">
+  <img src="assets/phone.jpeg" width="90%" alt="Mobile Dashboard View">
   <br>
-  <i>Synchronized operational dashboard demonstrating real-time attack telemetry and node management.</i>
+  <i>Synchronized mobile-based operation logs showing real-time mission telemetry.</i>
 </p>
 
 ### 🛡️ Network Intel & Reconnaissance
@@ -44,7 +44,7 @@ Deploy sophisticated **Nmap** profiles for rapid host discovery, service enumera
 ### 📡 Wireless Attack Arsenal
 Execute advanced wireless vectors including **WPA/WPA2 Handshake capture**, **PMKID extraction**, **Evil Twin** deployment, and **MDK4-based stress testing**—all through a tactical, streamlined workflow.
 <p align="center">
-  <img src="assets/wifi-attacks.jpg" width="85%" alt="Wireless Attacks">
+  <img src="assets/attack.png" width="85%" alt="Wireless Attacks">
 </p>
 
 ### 📊 Tactical Data & Live Logging

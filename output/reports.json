@@ -1,0 +1,20 @@
+[
+  {
+    "id": "48dcf121-0226-4018-9456-eb4809ec96d5",
+    "timestamp": "2025-12-18T22:18:08.393676",
+    "type": "SCENARIO (NETWORK SWEEP)",
+    "target": "Network Sweep",
+    "status": "Completed",
+    "details": "Launched scenario: Network Sweep",
+    "log_file": "network_sweep_20251218_221808.txt"
+  },
+  {
+    "id": "40e6c46d-aaf6-4519-acea-2aa85a42798e",
+    "timestamp": "2025-12-18T22:17:54.522044",
+    "type": "RECON (COMPREHENSIVE)",
+    "target": "192.168.4.0/24",
+    "status": "Completed",
+    "details": "Mode: COMPREHENSIVE",
+    "log_file": "recon_comprehensive_20251218_221754.txt"
+  }
+]
