@@ -8,15 +8,15 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.8%2B-green.svg" alt="Python: 3.8+"></a>
 </p>
 
+<h1 align="center">VoidPWN: Automated Penetration Testing Platform</h1>
+
 <p align="center">
-  <b>VoidPWN</b> is an automated network security assessment framework engineered for portability and field efficiency. It consolidates industry-standard security tools into a unified, web-based Command & Control (C2) interface, enabling operators to execute complex network discovery, wireless auditing, and automated exploitation scenarios with precision.
+  <i>A professional-grade framework for automated network discovery, wireless auditing, and field reconnaissance, optimized for Raspberry Pi.</i>
 </p>
 
----
-
-# VoidPWN: Automated Penetration Testing Platform
-## Advanced Network Security Auditing for Raspberry Pi
-> *A professional-grade toolkit for automated reconnaissance, wireless auditing, and field operations.*
+<p align="center">
+  VoidPWN consolidates industry-standard security tools into a unified, web-based Command & Control (C2) interface, enabling sessions to execute complex exploitation scenarios with precision and efficiency.
+</p>
 
 ---
 
@@ -30,7 +30,7 @@
 VoidPWN provides a responsive, operator-centric web interface accessible across your entire tactical stack. Control your mission from a **Raspberry Pi TFT**, a **Workstation**, or a **Mobile Device** with real-time synchronization.
 
 <p align="center">
-  <img src="assets/phone.jpeg" width="90%" alt="Mobile Dashboard View">
+  <img src="assets/phone.jpeg" width="300" alt="Mobile Dashboard View">
   <br>
   <i>Synchronized mobile-based operation logs showing real-time mission telemetry.</i>
 </p>
