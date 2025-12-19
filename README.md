@@ -25,21 +25,87 @@
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ System Architecture: The Tactical C2 Engine
+
+VoidPWN is engineered as a **Modular Offensive Orchestrator**, decoupling the high-level Command & Control (C2) interface from the low-level execution engines.
+
+### [ // FUNCTIONAL_LAYERS ]
 ```mermaid
-graph TD
-    User((Operator)) -->|HTTPS/Web| C2[Flask C2 Server]
-    subgraph "VoidPWN Logic Engine"
-        C2 -->|Subprocess| RECON[Network Recon Engine]
-        C2 -->|Subprocess| WIFI[Wireless Breach Suite]
-        C2 -->|IO Stream| HUD[Live HUD Streaming]
+graph TB
+    subgraph "Presentation & Control"
+        UI[Web Dashboard - JS/CSS]
+        CLI[voidpwn.sh - Interactive Bash]
     end
-    subgraph "Hardware Layer"
-        RECON -->|Nmap/Scanner| ETH[Ethernet/Interface]
-        WIFI -->|Aircrack/Wifite| RF[RF Monitor Mode]
-        TFT[Waveshare 3.5' TFT] -->|SPI| C2
+
+    subgraph "Application Core (C2 Logic)"
+        SVR[Flask API Server]
+        DMG[DeviceManager - Regex Intel]
+        RMG[ReportManager - Persistence]
+        HUD[Live HUD - Async Data Stream]
     end
+
+    subgraph "Execution Engine (The Arsenal)"
+        SCN[Scenarios.sh - Orchestration]
+        WIFI[wifi_tools.sh - WiFi Suite]
+        REC[recon.sh - Nmap Suite]
+        PYT[Python Tools - Scapy/Traffic]
+    end
+
+    subgraph "Infrastructure (Hardware Interface)"
+        MON[Monitor Mode Driver]
+        SPI[3.5' TFT SPI/Framebuffer]
+        PIS[PiSugar Power Management]
+    end
+
+    UI <-->|REST API| SVR
+    CLI <-->|Direct Invoke| SCN
+    SVR -->|Spawn Subprocess| SCN
+    SCN --> WIFI & REC & PYT
+    WIFI & REC --> MON
+    SVR --> SPI
 ```
+
+### [ // MISSION_LIFECYCLE_LOGIC ]
+How a single command (e.g., "Start Recon") traverses the system:
+
+```mermaid
+sequenceDiagram
+    participant Op as Operator (Web UI)
+    participant API as Flask C2 API
+    participant Proc as Subprocess (stdbuf)
+    participant Thread as Log Capture Thread
+    participant Intel as Regex Heuristics
+    participant HUD as Live HUD
+
+    Op->>API: POST /api/action/recon
+    API->>Proc: Spawn Binary (unbuffered)
+    API-->>Op: Returns PID/Success
+    loop Stream Execution
+        Proc->>Thread: Raw stdout line
+        Thread->>Intel: Pass line for analysis
+        Intel->>Intel: Match IP/MAC patterns
+        Intel-->>API: Update Inventory DB
+        Thread->>HUD: Push to circular log back-end
+        HUD-->>Op: Websocket/Poll update
+    end
+    Proc->>API: Mission Exit (Code 0)
+    API-->>Op: Broadcast Mission Complete
+```
+
+---
+
+## 🔬 Under the Hood: The Engineering Logic
+
+### ⚡ C2 Orchestration
+VoidPWN uses a **Threaded Producer-Consumer** pattern for process management. Using `stdbuf -oL`, we force binaries like `nmap` and `airodump-ng` to give up their memory buffers, allowing for **millisecond-latency HUD updates** instead of waiting for process completion.
+
+### 🔍 Real-time Intel Extraction
+The system doesn't just display logs; it audits them. Every line of output is passed through a **Regex Heuristic Engine** (`parse_inventory_info`) that identifies:
+- **Nmap Artifacts**: Auto-populating the target inventory from active scans.
+- **Mac/BSSID Signatures**: Tracking devices in the physical vicinity.
+
+### 📺 Hardware Abstraction
+The display engine switches between the standard HDMI framebuffer and the SPI-based TFT framebuffer by modifying the `/boot/config.txt` and re-initializing the `fbcp` (framebuffer copy) service. This allows for seamless transitions between "Field Mode" (TFT) and "Base Mode" (HDMI/Desktop).
 
 ---
 
