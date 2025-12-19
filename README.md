@@ -2,26 +2,41 @@
   <img src="https://socialify.git.ci/void0x11/VoidPWN/image?description=1&descriptionEditable=CtOS%20Infrastructure%20Exploitation%20%26%20Network%20Breach%20Framework&font=Inter&name=1&owner=1&pattern=Circuit%20Board&theme=Dark" width="100%" alt="VoidPWN Logo">
 </h1>
 
+```text
+      _   __ ____  ____ ____     ____ _      __ _   __
+     | | / // __ \/  _// __ \   / __ \ | /| / // | / /
+     | |/ // /_/ // / / / / /  / /_/ / |/ |/ //  |/ / 
+     |___/ \____//___//____/  / .___/|__/|__//_/|_/  
+                             /_/                      
+          >> SYSTEM_BREACH: CTOS_INFRASTRUCTURE_LINKED
+```
+
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.raspberrypi.org/"><img src="https://img.shields.io/badge/Platform-Raspberry%20Pi-red.svg" alt="Platform: Raspberry Pi"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.8%2B-green.svg" alt="Python: 3.8+"></a>
 </p>
 
-<h1 align="center">VOID_PWN // Bypassing CtOS Security</h1>
+<h2 align="center">VOID_PWN // DedSec Tactical Arsenal</h2>
 
 <p align="center">
-  <i>"Everything is connected. Everything can be exploited." — DedSec Archive 0x11</i>
+  <i>"Control is an illusion. We are the architects of the new reality."</i>
 </p>
 
 <p align="center">
-  <b>VoidPWN</b> is a professional-grade tactical framework engineered for DedSec operators. It consolidates advanced reconnaissance and wireless audit vectors into a unified, mobile-optimized Command & Control (C2) interface for field-operations.
+  <b>VoidPWN</b> is a high-latency, mobile-optimized C2 framework designed for <b>DedSec</b> field operations. It bypasses CtOS security layers by consolidating elite network discovery and wireless audit vectors into a single Raspberry Pi tactical unit.
 </p>
 
 ---
 
-> [!IMPORTANT]
-> **SYSTEM ALERT:** VOIDPWN HAS DETECTED CTOS NODES WITHIN RANGE. INITIALIZING BREACH PROTOCOL...
+### [ // FIELD_STATUS ]
+```yaml
+OPERATOR: void0x11
+LOCATION: [REDACTED]
+SYSTEM_INTEGRITY: █▓▒░░░░░░░ 24% (DEGRADED)
+ACTIVE_NODES: 147
+SIGNAL_STRENGTH: ▂▄▆█ 98%
+```
 
 ---
 
@@ -58,11 +73,11 @@ Monitor every phase of the operation through the **Live HUD**, featuring termina
   <img src="assets/Report&Logging.jpeg" width="85%" alt="Operational Logs">
 </p>
 
-### ⚙️ Modular Operation Management
-The intuitive HUD allows seamless switching between reconnaissance, active attacks, system configuration, and data management, ensuring the operator remains focused on the mission objective.
-<p align="center">
-  <img src="assets/Choose-Interface.jpeg" width="85%" alt="Dashboard Menu">
-</p>
+### [ // OPERATIONAL_MODALITY ]
+*   **🔍 CtOS_RECON**: Automated infrastructure mapping & OS fingerprinting.
+*   **📶 SIGNAL_DOMINANCE**: WPA/WPA2 protocol audit & handshake exfiltration.
+*   **🤖 SCENARIO_EXEC**: Pre-configured breach sequences for rapid deployment.
+*   **🖥️ C2_DASHBOARD**: Real-time telemetry & remote mission control.
 
 ---
 
@@ -100,18 +115,22 @@ The intuitive HUD allows seamless switching between reconnaissance, active attac
 | **Display** | Waveshare 3.5" TFT | Local field monitoring and touch-enabled HUD. |
 | **Storage** | 32GB+ UHS-I microSD | High-speed logging and handshake storage. |
 
-### Quick Installation
-1. **Initialize Environment**: Clone the repository and navigate to the project root.
+### [ // INITIALIZING_BREACH ]
+
+1. **DOWNLOAD_CORE**:
    ```bash
+   # [ CLONING_DEDSEC_REPO ]
    git clone https://github.com/void0x11/VoidPWN.git && cd VoidPWN
    ```
-2. **Setup Dependencies**: Install the core security engine and optional TFT drivers.
+2. **INJECT_DEPENDENCIES**:
    ```bash
+   # [ INSTALLING_SECURITY_ENGINE ]
    sudo ./scripts/core/setup.sh
-   sudo ./scripts/core/install_lcd.sh # Optional: Reboot required
+   sudo ./scripts/core/install_lcd.sh # Bypassing boot-loader protection
    ```
-3. **Launch HUD**: Execute the C2 server with root privileges.
+3. **EXECUTE_VOIDPWN**:
    ```bash
+   # [ LAUNCHING_TACTICAL_HUD ]
    cd dashboard && sudo python3 server.py
    ```
 
