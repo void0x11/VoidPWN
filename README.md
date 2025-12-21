@@ -25,45 +25,77 @@
 
 ---
 
-## 🏗️ System Architecture: The Core C2 Engine
+## 🏗️ Full-Stack System Architecture
 
-VoidPWN is engineered as a **Modular Security Orchestrator**, decoupling the high-level Command & Control (C2) interface from the underlying execution engines.
+VoidPWN is engineered as a **Modular Security Orchestrator**, decoupling the high-level Command & Control (C2) interface from the underlying execution engines and hardware abstraction layers.
 
-### [ FUNCTIONAL_LAYERS ]
+### [ SYSTEM_SCHEMATIC ]
 ```mermaid
-graph TB
-    subgraph "Presentation & Control"
-        UI[Web Dashboard - JS/CSS]
-        CLI[voidpwn.sh - Interactive Bash]
+graph TD
+    subgraph "Layer 4: Presentation (UI/UX)"
+        WEB[Web Dashboard - Responsive JS/CSS]
+        DSH[TFT-Optimized Live HUD]
+        CLI[Terminal Interactive CLI - Bash]
     end
 
-    subgraph "Application Core (C2 Logic)"
-        SVR[Flask API Server]
-        DMG[DeviceManager - Regex Intel]
-        RMG[ReportManager - Persistence]
-        HUD[Live HUD - Async Data Stream]
+    subgraph "Layer 3: Application (C2 Logic)"
+        SVR[Flask C2 API Server]
+        DMG[Device Intelligence - Regex Intel]
+        RMG[Report & Capture Manager]
+        IPC[Async Process Orchestrator]
     end
 
-    subgraph "Execution Engine (Security Suite)"
-        SCN[Scenarios.sh - Orchestration]
-        WIFI[wifi_tools.sh - WiFi Suite]
-        REC[recon.sh - Nmap Suite]
-        PYT[Python Tools - Scapy/Traffic]
+    subgraph "Layer 2: Execution (Security Engines)"
+        WIFI[Wireless Arsenal: Aircrack/Wifite/hcxdumptool]
+        NET[Network Intel: Nmap/GoBuster]
+        PYT[Custom Python Analysis: Scapy/Traffic]
     end
 
-    subgraph "Infrastructure (Hardware Interface)"
-        MON[Monitor Mode Driver]
-        SPI[3.5' TFT SPI/Framebuffer]
-        PIS[PiSugar Power Management]
+    subgraph "Layer 1: Infrastructure (OS & Drivers)"
+        KRN[Linux Kernel & Networking Stack]
+        DRV[RTL8812AU Injection Drivers]
+        SPI[Waveshare SPI Display Bridge]
     end
 
-    UI <-->|REST API| SVR
-    CLI <-->|Direct Invoke| SCN
-    SVR -->|Spawn Subprocess| SCN
-    SCN --> WIFI & REC & PYT
-    WIFI & REC --> MON
-    SVR --> SPI
+    subgraph "Layer 0: Physical (Hardware Platform)"
+        RPI[Raspberry Pi 4B - ARM SoC]
+        AF1[Alfa AWUS036ACH - USB 3.0]
+        TFT[3.5' TFT LCD - GPIO Bridge]
+        PWR[PiSugar / USB-C PMIC]
+        STR[UHS-I microSD - Persistent Storage]
+    end
+
+    %% Logic Flow
+    WEB <-->|SSE/REST| SVR
+    DSH <-->|fbcp mirroring| SPI
+    CLI <-->|Direct Path| IPC
+    SVR -->|Threaded Subprocess| IPC
+    IPC --> WIFI & NET & PYT
+    WIFI & NET --> DRV
+    DRV --- AF1
+    SPI --- TFT
+    KRN --- RPI
+    PWR --- RPI
+    STR --- RPI
 ```
+
+### [ TECHNICAL_LAYER_SPECIFICATIONS ]
+
+| Layer | Component | Technical Implementation / Method |
+| :--- | :--- | :--- |
+| **Physical (L0)** | **SBC Platform** | Raspberry Pi 4B (ARMv8 1.5GHz+, 4GB+ RAM) |
+| | **RF Interface** | Alfa AWUS036ACH (RTL8812AU) via USB 3.0 |
+| | **I/O Interface** | Waveshare 3.5" TFT LCD (SPI @ 32MHz) |
+| | **Power** | PiSugar 2/3 or 5V/3A PMIC for mobile deployment |
+| **Infra (L1)** | **Kernel** | Linux 6.x (Kali/Debian) with `nl80211` support |
+| | **Drivers** | `88XXau` (Monitor Mode + Frame Injection) |
+| | **Display** | `fbcp` (Framebuffer Copy) for HDMI -> TFT mirroring |
+| **Logic (L2-3)** | **Orchestrator** | Asynchronous `subprocess` management with `stdbuf` |
+| | **Intel Engine** | Real-time Regex heuristic parsing of binary stdout |
+| | **C2 API** | Python Flask with Threaded Log Producers |
+| **UI (L4)** | **Frontend** | Modern Vanilla JS/CSS with SSE (Server-Sent Events) |
+| | **Mobile HUD** | Responsive viewport scaling for field operations |
+
 
 ### [ SYSTEM_LIFECYCLE_LOGIC ]
 The workflow for a standard security assessment (e.g., "Network Reconnaissance") across the stack:
@@ -148,15 +180,18 @@ Monitor long-running processes through the **Live Interface**, featuring synchro
 
 ### [ RECON_LOGIC ]
 VoidPWN utilizes optimized **Nmap T3/T4** profiles for thorough perimeter analysis. Assessment phases include:
-1. **Host Discovery**: ICMP/ARP sweeps for inventory building.
-2. **Service Enumeration**: Comprehensive version detection (-sV) and OS fingerprinting (-O).
+1. **Network Discovery**: ICMP/ARP sweeps for inventory building via `nmap -sn`.
+2. **Service Enumeration**: Comprehensive version detection (`-sV`) and OS fingerprinting (`-O`).
 3. **Vulnerability Mapping**: Targeted NSE (Nmap Scripting Engine) execution for known service weaknesses.
+4. **Web Recon**: Directory and asset discovery using **GoBuster**.
 
 ### [ WIRELESS_SECURITY_LOGIC ]
 The wireless assessment engine automates the 802.11 audit lifecycle:
-*   **WPA/WPA2 Resilience**: Automated handshake acquisition and PMKID extraction for credential strength testing.
-*   **Authorized Rogue AP**: Deployment of test-specific access points for auditing client connection behaviors.
-*   **Protocol Hardening**: Integrated stress-testing of access points to evaluate Denial-of-Service (DoS) resilience.
+*   **WPA/WPA2 Resilience**: Automated handshake acquisition via `airodump-ng` and `aireplay-ng`.
+*   **Clientless PMKID**: Targeted RSN audit using `hcxdumptool` to bypass deauthentication needs.
+*   **WPS Auditing**: Online and offline (Pixie-Dust) brute-force via `reaver`.
+*   **Protocol Stress-Testing**: High-volume Beacon and Auth flooding using `mdk4`.
+*   **Authorized Rogue AP**: Deployment of test-specific access points using `airbase-ng` or `wifiphisher`.
 
 ---
 
@@ -164,35 +199,32 @@ The wireless assessment engine automates the 802.11 audit lifecycle:
 
 ### Network Intelligence
 *   **Service Analysis**: Automated host discovery and infrastructure profiling.
-*   **Vulnerability Assessment**: High-fidelity Nmap scripting for surface analysis of connected devices.
-*   **Directory Enumeration**: Integrated GoBuster for discovery of unlinked web assets.
+*   **Stealth Scanning**: Fragmented packet headers (`-f`) and decoy traffic (`-D`) to evade IDS/IPS.
+*   **Artifact Extraction**: Direct parsing of Nmap XML results into the unified inventory.
 
 ### Wireless Research
-*   **Automated Auditing**: Wifite-powered workflows for streamlined protocol testing.
-*   **Credential Strength**: WPA/WPS assessment vectors with targeted channel locking.
+*   **Automated Auditing**: **Wifite**-powered workflows for streamlined protocol testing.
+*   **Cracking Integration**: Ready-to-crack `.cap` and `.pcapng` export for **Hashcat/John**.
 *   **Spectrum Analysis**: Real-time monitoring of signal density and target metadata.
 
 ### Automation & Workflows
 *   **Rapid Audit**: Pre-configured network assessment routines (~5 minutes).
-*   **Stealth Profiling**: Low-profile scanning utilizing decoy traffic and timing adjustments.
-*   **Full Wireless Assessment**: End-to-end automated penetration testing workflows.
-
-### Deployment & Interface
-*   **Live Console**: Sub-second latency process monitoring and data visualization.
-*   **Unified Dashboard**: Global process management and host inventory tracking.
-*   **Hardware Integration**: Automated SPI TFT and HDMI output switching.
+*   **Condition-Based Sequences**: Sequential attacks (e.g., Scan -> Identify -> Deauth -> Capture) via `scenarios.sh`.
+*   **Remote C2**: Web-integrated telemetry and remote platform management.
 
 ---
 
 ## Hardware & Deployment
 
-### Recommended Build
-| Component | Specification | Description |
+### Recommended Physical Specification
+| Component | Specification | Technical Detail |
 | :--- | :--- | :--- |
-| **Processor** | Raspberry Pi 4B (4GB+) | Core computational unit for concurrent scanning. |
-| **Radio** | Alfa AWUS036ACH | Dual-band support with RTL8812AU injection. |
-| **Display** | Waveshare 3.5" TFT | Local field monitoring and touch-enabled HUD. |
-| **Storage** | 32GB+ UHS-I microSD | High-speed logging and handshake storage. |
+| **SBC** | Raspberry Pi 4B (4GB/8GB) | SoC: BCM2711 (Quad-core Cortex-A72) |
+| **Radio (Primary)** | Alfa AWUS036ACH | Chipset: RTL8812AU (Injection + Monitor Mode) |
+| **Display Interface** | Waveshare 3.5" TFT | Connection: SPI (GPIO Header), Resolution: 480x320 |
+| **Storage** | 32GB+ UHS-I microSD | Endurance rating: 100MB/s+ for high-speed logging |
+| **Management RF** | Built-in RPi WiFi | Dedicated wlan0 for C2 Dashboard access |
+| **Power Management** | PiSugar 2/3 (Optional) | Integrated UPS for portable field operations |
 
 ### [ SYSTEM_INITIALIZATION ]
 
