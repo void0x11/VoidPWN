@@ -112,6 +112,48 @@ graph TD
 | | **Display** | **Waveshare 3.5" TFT**: SPI Interface (MHz), XPT2046 Touch Controller |
 | | **Power** | **PiSugar / UPS**: I2C Battery Monitoring, 5V/3A Output Regulation via USB-C |
 
+### [ RF_PHYSICAL_LAYER_ANALYSIS ]
+
+VoidPWN operates at the **Layer 0 (Physical)** and **Layer 1 (Data Link)** intersection, manipulating raw 802.11 frames directly from the air interface. The following schematic illustrates the bidirectional signal mechanics between the VoidPWN engine and the target infrastructure.
+
+```mermaid
+sequenceDiagram
+    participant Target as 🎯 Target Network
+    participant Air as 🌊 RF Spectrum (Air Interface)
+    participant Ant as 📡 High-Gain Antenna
+    participant PHY as 🎛️ RTL8812AU (PHY/MAC)
+    participant Drv as 🔌 Driver (88xxau)
+    participant Void as 👾 VoidPWN Engine
+
+    Note over Target, Void: 🟡 RX PATH: Monitor Mode (Passive Intelligence)
+    Target->>Air: 802.11 Beacon Frames (100ms)
+    Target->>Air: Data Packets / Probes
+    Air->>Ant: RF Signal (2.412 GHz / 5 GHz)
+    Ant->>PHY: Analog Carrier Wave
+    PHY->>Drv: Demodulation (ADC/OFDM)
+    Drv->>Void: Radiotap Header + 802.11 Frame
+    Void->>Void: Regex Analysis (Identify Target)
+
+    Note over Target, Void: 🔴 TX PATH: Active Injection (Attack Vector)
+    Void->>Drv: Construct Deauth Packet (Reason: 7)
+    Drv->>PHY: Frame -> IQ Samples
+    PHY->>Ant: Modulation (CCK/OFDM via DAC)
+    Ant->>Air: High-Power Injection (30dBm)
+    Air->>Target: Deauthentication Frame
+    Target->>Target: Connection Drop (DoS)
+    
+    Note over Target, Void: 🟢 HANDSHAKE CAPTURE
+    Target->>Air: EAPOL 4-Way Handshake (Reconnection)
+    Air->>Ant: Capture Transient Frames
+    Ant->>PHY: Standard RX Path
+    PHY->>Void: Save to .cap (PMKID/MIC Extraction)
+```
+
+**Signal Processing Mechanics:**
+1.  **Signal Acquisition (RX)**: The **RTL8812AU** chipset operates in *Promiscuous Monitor Mode*, bypassing standard MAC filtering to capture all raw 802.11 frames within the antenna's sensitivity range.
+2.  **Demodulation**: Physical signals (OFDM for 802.11ac, CCK for 802.11b) are converted by the PHY's **ADC (Analog-to-Digital Converter)** into digital baseband signals.
+3.  **Injection (TX)**: For active attacks (Deauth/Beacon Flood), the engine bypasses the kernel's regulatory domain constraints to drive the amp at **30dBm (1000mW)**, saturating the local air interface to ensure frame delivery.
+
 
 ### [ SYSTEM_LIFECYCLE_LOGIC ]
 The workflow for a standard security assessment (e.g., "Network Reconnaissance") across the stack:
