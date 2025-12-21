@@ -27,74 +27,90 @@
 
 ## 🏗️ Full-Stack System Architecture
 
-VoidPWN is engineered as a **Modular Security Orchestrator**, decoupling the high-level Command & Control (C2) interface from the underlying execution engines and hardware abstraction layers.
+VoidPWN is engineered as a **Modular Security Orchestrator**, decoupling the high-level Command & Control (C2) interface from the underlying execution engines and hardware abstraction layers. The system integrates over 20+ specialized security tools into a unified, automated framework.
 
 ### [ SYSTEM_SCHEMATIC ]
 ```mermaid
 graph TD
     subgraph "Layer 4: Presentation (UI/UX)"
-        WEB[Web Dashboard - Responsive JS/CSS]
-        DSH[TFT-Optimized Live HUD]
+        WEB[Web Dashboard - Flask/Jinja2]
+        DSH[TFT Live HUD - Mobile Viewport]
         CLI[Terminal Interactive CLI - Bash]
     end
 
-    subgraph "Layer 3: Application (C2 Logic)"
+    subgraph "Layer 3: Logic & Orchestration"
         SVR[Flask C2 API Server]
-        DMG[Device Intelligence - Regex Intel]
-        RMG[Report & Capture Manager]
-        IPC[Async Process Orchestrator]
+        IPC[Subprocess Manager - stdbuf/asyncio]
+        PAR[Telemetry Engine - Regex/XML Parsing]
+        DEV[Device Intel DB - JSON Persistence]
     end
 
-    subgraph "Layer 2: Execution (Security Engines)"
-        WIFI[Wireless Arsenal: Aircrack/Wifite/hcxdumptool]
-        NET[Network Intel: Nmap/GoBuster]
-        PYT[Custom Python Analysis: Scapy/Traffic]
+    subgraph "Layer 2: Execution Engines"
+        direction TB
+        subgraph "Wireless Arsenal"
+            AIR[Aircrack-ng Suite - Monitor/Inject]
+            WFT[Wifite - Automated Audit]
+            MDK[MDK4 - Beacon Operations]
+            HCX[hcxdumptool - PMKID Stub]
+            WPS[Reaver/PixieWPS - WPS Audit]
+            ETW[Wifiphisher/Fluxion - AP Sim]
+        end
+        subgraph "Network Intel"
+            NMP[Nmap + NSE - Discovery/Vuln]
+            ARP[arp-scan - L2 Discovery]
+            GOB[GoBuster - Web Enum]
+            SMB[enum4linux/smbclient - SMB Enum]
+            DNS[dig/nslookup - DNS Enum]
+        end
     end
 
-    subgraph "Layer 1: Infrastructure (OS & Drivers)"
-        KRN[Linux Kernel & Networking Stack]
-        DRV[RTL8812AU Injection Drivers]
-        SPI[Waveshare SPI Display Bridge]
+    subgraph "Layer 1: System Infrastructure"
+        KRN[Linux Kernel 6.x - nl80211 Stack]
+        DRV_RF[Driver: rtl88xxau - Injection]
+        DRV_IO[Driver: LCD-show - SPI Inteface]
+        SVC[fbcp - Framebuffer Mirroring]
     end
 
-    subgraph "Layer 0: Physical (Hardware Platform)"
-        RPI[Raspberry Pi 4B - ARM SoC]
-        AF1[Alfa AWUS036ACH - USB 3.0]
-        TFT[3.5' TFT LCD - GPIO Bridge]
-        PWR[PiSugar / USB-C PMIC]
-        STR[UHS-I microSD - Persistent Storage]
+    subgraph "Layer 0: Physical Hardware"
+        SOC[RPi 4B - BCM2711 Cortex-A72]
+        RF[Alfa AWUS036ACH - Realtek 8812AU]
+        DIS[Waveshare 3.5' TFT - 480x320]
+        PWR[PiSugar/PMIC - 5V/3A Power]
+        SPI_BUS[SPI Bus - High Speed Data]
+        USB_BUS[USB 3.0 - High Throughput RF]
     end
 
-    %% Logic Flow
-    WEB <-->|SSE/REST| SVR
-    DSH <-->|fbcp mirroring| SPI
-    CLI <-->|Direct Path| IPC
-    SVR -->|Threaded Subprocess| IPC
-    IPC --> WIFI & NET & PYT
-    WIFI & NET --> DRV
-    DRV --- AF1
-    SPI --- TFT
-    KRN --- RPI
-    PWR --- RPI
-    STR --- RPI
+    %% Flow Connections
+    WEB <-->|REST/SSE| SVR
+    DSH <-->|Render| SVC
+    SVR -->|Spawn| IPC
+    IPC --> AIR & WFT & NMP & GOB
+    AIR & WFT --> DRV_RF
+    NMP & SMB --> KRN
+    DRV_RF <-->|Data| USB_BUS
+    USB_BUS <-->|Signal| RF
+    SVC --> DRV_IO
+    DRV_IO <-->|Pixel Data| SPI_BUS
+    SPI_BUS <-->|IO| DIS
+    SOC --> USB_BUS & SPI_BUS
 ```
 
 ### [ TECHNICAL_LAYER_SPECIFICATIONS ]
 
-| Layer | Component | Technical Implementation / Method |
+| Layer | Component | Integrated Tooling & Technologies |
 | :--- | :--- | :--- |
-| **Physical (L0)** | **SBC Platform** | Raspberry Pi 4B (ARMv8 1.5GHz+, 4GB+ RAM) |
-| | **RF Interface** | Alfa AWUS036ACH (RTL8812AU) via USB 3.0 |
-| | **I/O Interface** | Waveshare 3.5" TFT LCD (SPI @ 32MHz) |
-| | **Power** | PiSugar 2/3 or 5V/3A PMIC for mobile deployment |
-| **Infra (L1)** | **Kernel** | Linux 6.x (Kali/Debian) with `nl80211` support |
-| | **Drivers** | `88XXau` (Monitor Mode + Frame Injection) |
-| | **Display** | `fbcp` (Framebuffer Copy) for HDMI -> TFT mirroring |
-| **Logic (L2-3)** | **Orchestrator** | Asynchronous `subprocess` management with `stdbuf` |
-| | **Intel Engine** | Real-time Regex heuristic parsing of binary stdout |
-| | **C2 API** | Python Flask with Threaded Log Producers |
-| **UI (L4)** | **Frontend** | Modern Vanilla JS/CSS with SSE (Server-Sent Events) |
-| | **Mobile HUD** | Responsive viewport scaling for field operations |
+| **L4: Presentation** | **Dashboard** | Python Flask, Jinja2, Socket.IO, Vanilla JS, CSS3 Grid |
+| | **CLI** | Bash 5.0+, Interactive Menu System, Colorized Output |
+| **L3: Orchestration** | **Process Mgmt** | `subprocess` (Python), `stdbuf` (Unbuffered I/O), `collections.deque` |
+| | **Data Parsing** | Regex Heuristics (Live Stream), `xml.etree` (Nmap XML), `json` |
+| **L2: Execution** | **Wireless** | `aircrack-ng`, `aireplay-ng`, `airodump-ng`, `wifite`, `mdk4`, `hcxdumptool`, `reaver`, `pixiewps`, `macchanger` |
+| | **Network** | `nmap` (NSE), `gobuster`, `enum4linux`, `smbclient`, `arp-scan`, `dirb`, `tshark` |
+| **L1: Infrastructure** | **Drivers** | `88xxau-dkms` (Monitor Mode), `LCD-show` (SPI), `fbcp` (Display Mirroring) |
+| | **OS/Kernel** | Kali Linux / Raspberry Pi OS (Debian 12 Bookworm), Kernel 6.x |
+| **L0: Physical** | **Compute** | **Raspberry Pi 4B**: Broadcom BCM2711, Quad-core Cortex-A72 (ARM v8) 64-bit SoC @ 1.5GHz |
+| | **RF Interface** | **Alfa AWUS036ACH**: Realtek RTL8812AU Chipset, USB 3.0, Dual-Band 2.4/5GHz, High-Gain Antennas |
+| | **Display** | **Waveshare 3.5" TFT**: SPI Interface (MHz), XPT2046 Touch Controller |
+| | **Power** | **PiSugar / UPS**: I2C Battery Monitoring, 5V/3A Output Regulation via USB-C |
 
 
 ### [ SYSTEM_LIFECYCLE_LOGIC ]
