@@ -4,7 +4,6 @@
 # VoidPWN - Master Build & Setup Orchestrator
 # Description: Unified "One-Touch" installer for the entire VoidPWN platform.
 #              Consolidates toolchain, system, kiosk, and display configurations.
-# Author: void0x11
 # Usage: sudo ./build_voidpwn.sh
 ################################################################################
 

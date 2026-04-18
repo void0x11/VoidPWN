@@ -1134,6 +1134,275 @@ def action_throttle():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# --- Configuration / Settings ---
+CONFIG_FILE = os.path.join(VOIDPWN_DIR, 'output', 'config.json')
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_config(data):
+    try:
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Failed to save config: {e}")
+        return False
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Return current settings - API key is masked, never returned in plaintext"""
+    cfg = load_config()
+    api_key = cfg.get('api_key', '')
+    masked = ('*' * (len(api_key) - 4) + api_key[-4:]) if len(api_key) > 4 else ('*' * len(api_key))
+    return jsonify({
+        'provider': cfg.get('provider', 'gemini'),
+        'api_key_masked': masked,
+        'has_key': bool(api_key)
+    })
+
+@app.route('/api/settings', methods=['POST'])
+def save_settings():
+    """Save LLM provider and API key to config file"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    cfg = load_config()
+    if 'provider' in data:
+        cfg['provider'] = data['provider']
+    if 'api_key' in data and data['api_key']:
+        cfg['api_key'] = data['api_key']
+    if save_config(cfg):
+        return jsonify({'status': 'success'})
+    return jsonify({'error': 'Failed to save configuration'}), 500
+
+
+# --- AI Analysis ---
+def summarize_log(content, max_lines=3000):
+    """
+    Pre-process raw log content into a structured summary before sending to LLM.
+    Extracts key findings: open ports, services, vulnerabilities, OS, errors.
+    Returns a condensed structured text block.
+    """
+    lines = content.splitlines()[:max_lines]
+
+    open_ports = []
+    services = []
+    vulnerabilities = []
+    os_detected = []
+    hosts = []
+    errors = []
+    wifi_networks = []
+    handshakes = []
+    misc_findings = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Nmap open ports
+        if re.search(r'\d+/(tcp|udp)\s+open', stripped, re.I):
+            open_ports.append(stripped)
+        # Service/version lines
+        elif re.search(r'\d+/(tcp|udp)\s+open\s+\S+\s+.+', stripped, re.I):
+            services.append(stripped)
+        # VULNERABLE findings
+        elif 'VULNERABLE' in stripped or re.search(r'CVE-\d{4}-\d+', stripped):
+            vulnerabilities.append(stripped)
+        # OS detection
+        elif re.search(r'OS (details|guess|CPE):', stripped, re.I) or re.search(r'Running:', stripped):
+            os_detected.append(stripped)
+        # Nmap host up
+        elif 'Nmap scan report for' in stripped:
+            hosts.append(stripped)
+        # Handshake captures
+        elif re.search(r'(handshake|WPA|PMKID|\.cap)', stripped, re.I):
+            handshakes.append(stripped)
+        # WiFi networks
+        elif re.search(r'(ESSID|BSSID|beacon|channel|privacy)', stripped, re.I):
+            wifi_networks.append(stripped)
+        # Errors/warnings
+        elif re.search(r'\b(error|warning|failed|denied|timeout)\b', stripped, re.I):
+            errors.append(stripped)
+        # NSE script output / interesting lines
+        elif stripped.startswith('|') and len(stripped) > 4:
+            misc_findings.append(stripped)
+
+    # Cap each category to avoid token bloat
+    def cap(lst, n): return lst[:n]
+
+    summary_parts = [
+        "=== STRUCTURED SCAN SUMMARY ===",
+        f"Total log lines processed: {len(lines)}",
+        "",
+    ]
+
+    if hosts:
+        summary_parts += [f"--- DISCOVERED HOSTS ({len(hosts)}) ---"] + cap(hosts, 50) + [""]
+    if open_ports:
+        summary_parts += [f"--- OPEN PORTS ({len(open_ports)}) ---"] + cap(open_ports, 100) + [""]
+    if services:
+        summary_parts += [f"--- SERVICES & VERSIONS ({len(services)}) ---"] + cap(services, 60) + [""]
+    if vulnerabilities:
+        summary_parts += [f"--- VULNERABILITIES & CVEs ({len(vulnerabilities)}) ---"] + cap(vulnerabilities, 80) + [""]
+    if os_detected:
+        summary_parts += [f"--- OS DETECTION ({len(os_detected)}) ---"] + cap(os_detected, 20) + [""]
+    if wifi_networks:
+        summary_parts += [f"--- WIFI NETWORKS ({len(wifi_networks)}) ---"] + cap(wifi_networks, 40) + [""]
+    if handshakes:
+        summary_parts += [f"--- HANDSHAKES / CAPTURES ({len(handshakes)}) ---"] + cap(handshakes, 20) + [""]
+    if misc_findings:
+        summary_parts += [f"--- SCRIPT OUTPUT / FINDINGS ({len(misc_findings)}) ---"] + cap(misc_findings, 60) + [""]
+    if errors:
+        summary_parts += [f"--- ERRORS & WARNINGS ({len(errors)}) ---"] + cap(errors, 20) + [""]
+
+    if not any([hosts, open_ports, vulnerabilities, wifi_networks]):
+        # Fallback: send first 300 lines if nothing structured found
+        summary_parts += ["--- RAW LOG EXCERPT (first 300 lines) ---"] + lines[:300]
+
+    return "\n".join(summary_parts)
+
+
+def call_gemini(api_key, prompt):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    payload = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096}
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        result = json.loads(resp.read().decode('utf-8'))
+    return result['candidates'][0]['content']['parts'][0]['text']
+
+
+def call_groq(api_key, prompt):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    payload = json.dumps({
+        "model": "llama3-8b-8192",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "max_tokens": 4096
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }, method="POST")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        result = json.loads(resp.read().decode('utf-8'))
+    return result['choices'][0]['message']['content']
+
+
+def call_openai(api_key, prompt):
+    url = "https://api.openai.com/v1/chat/completions"
+    payload = json.dumps({
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "max_tokens": 4096
+    }).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }, method="POST")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        result = json.loads(resp.read().decode('utf-8'))
+    return result['choices'][0]['message']['content']
+
+
+@app.route('/api/ai/analyze', methods=['POST'])
+def ai_analyze():
+    """
+    Analyze a scan report using an LLM.
+    Reads the log file, pre-processes it into a structured summary,
+    then sends to the configured LLM with a checklist-driven prompt.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    log_filename = data.get('log_filename')
+    checklist = data.get('checklist', [])
+    report_type = data.get('report_type', 'network scan')
+
+    if not checklist:
+        return jsonify({'error': 'Select at least one analysis section'}), 400
+
+    # Load config
+    cfg = load_config()
+    api_key = cfg.get('api_key', '').strip()
+    provider = cfg.get('provider', 'gemini')
+
+    if not api_key:
+        return jsonify({'error': 'No API key configured. Go to System > AI Configuration to add your key.'}), 400
+
+    # Load log file content
+    log_content = ""
+    if log_filename:
+        safe_name = os.path.basename(log_filename)
+        log_path = os.path.join(LOGS_DIR, safe_name)
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', errors='replace') as f:
+                    log_content = f.read()
+            except Exception as e:
+                return jsonify({'error': f'Failed to read log file: {str(e)}'}), 500
+
+    # Pre-process into structured summary
+    if log_content:
+        structured_summary = summarize_log(log_content)
+    else:
+        structured_summary = f"No log file available. Report type: {report_type}"
+
+    # Build sections string from checklist
+    sections = "\n".join(f"- {item}" for item in checklist)
+
+    # Build LLM prompt
+    system_context = (
+        "You are a senior penetration tester and security analyst with 15 years of experience. "
+        "You have been given a structured summary of a pentest/network scan. "
+        "Produce a professional, clear security report covering ONLY the sections requested. "
+        "For each vulnerability or finding, include: description, severity (Critical/High/Medium/Low/Info), "
+        "and specific actionable remediation steps. Use markdown formatting."
+    )
+
+    prompt = f"""{system_context}
+
+SCAN TYPE: {report_type}
+
+STRUCTURED SCAN DATA:
+{structured_summary}
+
+REQUESTED REPORT SECTIONS:
+{sections}
+
+Write the full professional security report now, covering each requested section. Be specific and actionable."""
+
+    try:
+        if provider == 'gemini':
+            analysis = call_gemini(api_key, prompt)
+        elif provider == 'groq':
+            analysis = call_groq(api_key, prompt)
+        elif provider == 'openai':
+            analysis = call_openai(api_key, prompt)
+        else:
+            return jsonify({'error': f'Unknown provider: {provider}'}), 400
+
+        return jsonify({'analysis': analysis})
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        return jsonify({'error': f'LLM API error ({e.code}): {body[:300]}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'Failed to contact LLM: {str(e)}'}), 502
+
+
 if __name__ == '__main__':
     print("Starting VoidPWN Dashboard Server...")
     print("Access dashboard at: http://<PI_IP>:5000")

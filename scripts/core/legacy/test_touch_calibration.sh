@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Touch Calibration Test Script
 # Description: Interactive script to find the correct touch calibration matrix
-# Author: void0x11
 # Usage: sudo ./test_touch_calibration.sh
 ################################################################################
 

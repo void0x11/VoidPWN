@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Complete TFT Setup Script
 # Description: Applies all fixes for TFT rotation, touch, and HDMI restore
-# Author: void0x11
 # Usage: sudo ./complete_tft_setup.sh
 ################################################################################
 

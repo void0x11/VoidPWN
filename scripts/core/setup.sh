@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Main Setup Script
 # Description: Automated installation and configuration for VoidPWN device
-# Author: void0x11
 # Usage: sudo ./setup.sh
 ################################################################################
 

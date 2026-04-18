@@ -4,7 +4,6 @@
 # VoidPWN - Touch Screen Kiosk Mode Setup
 # Description: Configures the Raspberry Pi to boot directly into the Web Dashboard
 #              in fullscreen Kiosk mode, ideal for 3.5" touch screens.
-# Author: void0x11
 # Usage: sudo ./setup_kiosk.sh
 ################################################################################
 

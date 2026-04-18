@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - WiFi Bandwidth Throttler
 # Description: Limit bandwidth for specific devices on the network
-# Author: void0x11
 ################################################################################
 
 # Colors

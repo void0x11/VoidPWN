@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Network Reconnaissance Script
 # Description: Automated network scanning and enumeration
-# Author: void0x11
 # Usage: ./recon.sh [options]
 ################################################################################
 

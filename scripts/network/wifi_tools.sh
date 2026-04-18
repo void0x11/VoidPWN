@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - WiFi Attack Automation Script
 # Description: Automated WiFi reconnaissance and attack tools
-# Author: void0x11
 # Usage: ./wifi_tools.sh [options]
 ################################################################################
 

@@ -544,6 +544,35 @@ input:focus {
     box-shadow: 0 0 30px rgba(0, 243, 255, 0.2);
 }
 
+/* AI Checklist */
+.ai-check-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: var(--text);
+    transition: border-color 0.15s, background 0.15s;
+}
+.ai-check-item:hover {
+    border-color: var(--primary);
+    background: rgba(0, 243, 255, 0.05);
+}
+.ai-check-item input[type="checkbox"] {
+    accent-color: var(--primary);
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+.ai-check-item:has(input:checked) {
+    border-color: var(--primary);
+    background: rgba(0, 243, 255, 0.08);
+    color: var(--primary);
+}
+
 /* Tags */
 .tag-container {
     display: flex;

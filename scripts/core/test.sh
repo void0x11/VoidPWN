@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - System Test Script
 # Description: Comprehensive testing of all VoidPWN components
-# Author: void0x11
 # Usage: sudo ./scripts/core/test.sh
 ################################################################################
 

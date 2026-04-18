@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Advanced WiFi Tools Installer
 # Description: Installs specialized tools for PMKID, MDK4, and WPS attacks
-# Author: void0x11
 ################################################################################
 
 # Colors

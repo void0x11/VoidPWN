@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - HDMI Switcher
 # Description: Restores HDMI output and disables LCD drivers
-# Author: void0x11
 # Usage: sudo ./restore_hdmi.sh
 ################################################################################
 

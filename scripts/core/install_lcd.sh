@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - LCD Display Installation Script
 # Description: Install Waveshare 3.5" LCD drivers (run this LAST)
-# Author: void0x11
 # Usage: sudo ./install_lcd.sh
 ################################################################################
 

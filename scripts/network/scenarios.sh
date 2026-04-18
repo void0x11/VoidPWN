@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Automated Attack Scenarios
 # Description: Pre-configured attack scenarios for one-click execution
-# Author: void0x11
 # Usage: ./scenarios.sh
 ################################################################################
 

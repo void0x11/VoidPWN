@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Additional Tools Installer
 # Description: Install extra pentesting tools on demand
-# Author: void0x11
 # Usage: sudo ./install_tools.sh
 ################################################################################
 

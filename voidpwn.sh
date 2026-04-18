@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Interactive Main Menu
 # Description: Main interface for VoidPWN pentesting device
-# Author: void0x11
 # Usage: ./voidpwn.sh
 ################################################################################
 
@@ -29,7 +28,6 @@ print_banner() {
      ╚╝ └─┘┴└─┘┴╩  ╚╩╝╝╚╝
     ═══════════════════════
     Portable Pentesting Device
-    by void0x11
 EOF
     echo -e "${NC}"
     echo ""

@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Dashboard Launcher
 # Description: Start the web dashboard server
-# Author: void0x11
 # Usage: ./dashboard.sh [start|stop|status]
 ################################################################################
 

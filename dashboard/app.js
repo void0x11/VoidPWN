@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadInterfaces();
     await checkSelectedDevice();
     loadReports();
+    loadSettings();
     setInterval(refreshSystemInfo, 5000);
     setInterval(pollLiveLogs, 1000);
     setInterval(loadReports, 10000); // Poll reports every 10s
@@ -490,6 +491,9 @@ async function loadReports() {
     res.reports.forEach(r => {
         const tr = document.createElement('tr');
         const logBtn = r.log_file ? `<button class="btn" style="padding:2px 8px; font-size:0.6rem" onclick="viewFullLog('${r.log_file}', '${r.type} @ ${r.target}')">VIEW OUTPUT</button>` : '<span style="color:var(--text-dim)">N/A</span>';
+        const aiBtn = r.log_file
+            ? `<button class="btn" style="padding:2px 8px; font-size:0.6rem; border-color:var(--secondary); color:var(--secondary)" onclick="openAiModal('${r.id}', '${r.log_file}', '${r.type} @ ${r.target}')">AI</button>`
+            : '<span style="color:var(--text-dim)">—</span>';
 
         tr.innerHTML = `
             <td style="padding:10px">${r.timestamp.split('T')[1].split('.')[0]}</td>
@@ -497,6 +501,7 @@ async function loadReports() {
             <td>${r.target}</td>
             <td class="${r.status.toLowerCase()}">${r.status}</td>
             <td>${logBtn}</td>
+            <td>${aiBtn}</td>
         `;
         container.appendChild(tr);
     });
@@ -532,6 +537,101 @@ async function viewFullLog(filename, title) {
 
 function closeLogViewer() {
     document.getElementById('log-viewer-overlay').classList.remove('active');
+}
+
+// --- AI Settings ---
+async function loadSettings() {
+    const res = await api('/api/settings');
+    if (res.error) return;
+
+    const providerEl = document.getElementById('ai-provider');
+    const statusEl = document.getElementById('ai-key-status');
+    if (providerEl) providerEl.value = res.provider || 'gemini';
+    if (statusEl) {
+        if (res.has_key) {
+            statusEl.textContent = `Key saved: ${res.api_key_masked}`;
+            statusEl.style.color = 'var(--accent)';
+        } else {
+            statusEl.textContent = 'Not configured';
+            statusEl.style.color = 'var(--text-dim)';
+        }
+    }
+}
+
+async function saveSettings() {
+    const provider = document.getElementById('ai-provider').value;
+    const apiKey = document.getElementById('ai-api-key').value.trim();
+    const statusEl = document.getElementById('ai-key-status');
+
+    if (!apiKey) {
+        statusEl.textContent = 'Enter an API key to save.';
+        statusEl.style.color = '#ff4444';
+        return;
+    }
+
+    const res = await api('/api/settings', 'POST', { provider, api_key: apiKey });
+    if (res.status === 'success') {
+        document.getElementById('ai-api-key').value = '';
+        statusEl.textContent = 'Key saved ✓';
+        statusEl.style.color = 'var(--accent)';
+        log('AI settings saved', 'success');
+        await loadSettings();
+    } else {
+        statusEl.textContent = `Error: ${res.error}`;
+        statusEl.style.color = '#ff4444';
+    }
+}
+
+// --- AI Analysis Modal ---
+const aiModalState = { reportId: null, logFilename: null, reportType: '' };
+
+function openAiModal(reportId, logFilename, reportType) {
+    aiModalState.reportId = reportId;
+    aiModalState.logFilename = logFilename;
+    aiModalState.reportType = reportType;
+
+    document.getElementById('ai-modal-subtitle').textContent = reportType;
+    document.getElementById('ai-output').innerHTML = '<span style="color:var(--text-dim)">Select sections and click GENERATE REPORT...</span>';
+    document.getElementById('ai-status-msg').textContent = '';
+    document.getElementById('ai-modal-overlay').classList.add('active');
+}
+
+function closeAiModal() {
+    document.getElementById('ai-modal-overlay').classList.remove('active');
+}
+
+async function analyzeWithAI() {
+    const checked = [...document.querySelectorAll('#ai-modal-overlay input[type="checkbox"]:checked')]
+        .map(cb => cb.value);
+
+    if (checked.length === 0) {
+        document.getElementById('ai-status-msg').textContent = 'Select at least one section.';
+        return;
+    }
+
+    const outputEl = document.getElementById('ai-output');
+    const statusEl = document.getElementById('ai-status-msg');
+
+    outputEl.textContent = 'Contacting LLM... please wait.';
+    statusEl.textContent = 'Analyzing...';
+    statusEl.style.color = 'var(--primary)';
+
+    const res = await api('/api/ai/analyze', 'POST', {
+        report_id: aiModalState.reportId,
+        log_filename: aiModalState.logFilename,
+        report_type: aiModalState.reportType,
+        checklist: checked
+    });
+
+    if (res.analysis) {
+        outputEl.textContent = res.analysis;
+        statusEl.textContent = '✓ Report generated';
+        statusEl.style.color = 'var(--accent)';
+    } else {
+        outputEl.textContent = `Error: ${res.error || 'Unknown error from server.'}`;
+        statusEl.textContent = 'Failed';
+        statusEl.style.color = '#ff4444';
+    }
 }
 
 async function refreshSystemInfo() {

@@ -3,7 +3,6 @@
 ################################################################################
 # VoidPWN - Enable Auto-Launch on Boot
 # Description: Configure VoidPWN to launch automatically on LCD screen
-# Author: void0x11
 # Usage: sudo ./enable_autolaunch.sh
 ################################################################################
 

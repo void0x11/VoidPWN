@@ -8,7 +8,6 @@
  ╚╝ └─┘┴└─┘┴╩  ╚╩╝╝╚╝
 ═══════════════════════
 Portable Pentesting Device
-by void0x11
 ```
 
 ## Table of Contents
@@ -961,4 +960,3 @@ This tool is provided for **authorized penetration testing** and **educational p
 
 ---
 
-*Created by void0x11 • VoidPWN Pentesting Framework*
