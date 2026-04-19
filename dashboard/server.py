@@ -634,8 +634,9 @@ def action_switch_tft():
 def action_switch_hdmi():
     """Switch to HDMI output"""
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/core/restore_hdmi.sh"
-        subprocess.Popen(cmd, shell=True)
+        script = os.path.join(VOIDPWN_DIR, 'scripts', 'core', 'restore_hdmi.sh')
+        os.chmod(script, 0o755)
+        subprocess.Popen(['bash', script])
         
         reporter.add_report(
             "SYSTEM", 
@@ -861,9 +862,9 @@ def action_shutdown():
 def action_restore_hdmi():
     """Switch to HDMI output"""
     try:
-        # Use shell=True to ensure proper execution
-        cmd = f"{VOIDPWN_DIR}/scripts/core/restore_hdmi.sh"
-        subprocess.Popen(cmd, shell=True)
+        script = os.path.join(VOIDPWN_DIR, 'scripts', 'core', 'restore_hdmi.sh')
+        os.chmod(script, 0o755)
+        subprocess.Popen(['bash', script])
         
         reporter.add_report(
             "SYSTEM", 
@@ -1272,12 +1273,12 @@ def summarize_log(content, max_lines=3000):
 
 
 def call_gemini(api_key, prompt):
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096}
     }).encode('utf-8')
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json", "X-goog-api-key": api_key}, method="POST")
     with urllib.request.urlopen(req, timeout=60) as resp:
         result = json.loads(resp.read().decode('utf-8'))
     return result['candidates'][0]['content']['parts'][0]['text']
