@@ -1513,22 +1513,35 @@ def summarize_log(content, max_lines=3000):
     return "\n".join(summary_parts)
 
 
+GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash']
+
 def call_gemini(api_key, prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096}
-    }).encode('utf-8')
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json", "X-goog-api-key": api_key}, method="POST")
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        result = json.loads(resp.read().decode('utf-8'))
-    return result['candidates'][0]['content']['parts'][0]['text']
+    """Call Gemini API with model fallback chain"""
+    last_err = None
+    for model in GEMINI_MODELS:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        payload = json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096}
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                result = json.loads(resp.read().decode('utf-8'))
+            return result['candidates'][0]['content']['parts'][0]['text']
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', errors='replace')
+            if e.code == 404 or 'not found' in body.lower() or 'not supported' in body.lower():
+                last_err = e
+                continue  # Try next model
+            raise  # Re-raise non-model-not-found errors (auth, etc.)
+    raise last_err or Exception(f"No working Gemini model found. Tried: {', '.join(GEMINI_MODELS)}")
 
 
 def call_groq(api_key, prompt):
     url = "https://api.groq.com/openai/v1/chat/completions"
     payload = json.dumps({
-        "model": "llama3-8b-8192",
+        "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3,
         "max_tokens": 4096
