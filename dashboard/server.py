@@ -12,6 +12,7 @@ import glob
 import json
 import csv
 import fcntl
+import shutil
 from datetime import datetime
 import re
 import urllib.request
@@ -62,6 +63,9 @@ def parse_inventory_info(line):
         # but we can look for specific tools like airodump or nmap
         pass
 
+ERROR_KEYWORDS = ('command not found', 'no such file', 'not found', 'error:', 'permission denied',
+                  'fatal:', 'failed', 'cannot', 'unable to', 'operation not permitted')
+
 def run_proc_and_capture(cmd_str, log_file=None, report_id=None):
     """Run a process in the background and capture its output to LIVE_LOGS and optionally a file"""
     try:
@@ -85,8 +89,13 @@ def run_proc_and_capture(cmd_str, log_file=None, report_id=None):
             for line in iter(proc.stdout.readline, ""):
                 if line:
                     clean_line = line.strip()
-                    add_live_log(clean_line)
-                    parse_inventory_info(clean_line) # Live inventory update
+                    # Detect error keywords and surface them as error type
+                    line_lower = clean_line.lower()
+                    if any(kw in line_lower for kw in ERROR_KEYWORDS):
+                        add_live_log(clean_line, "error")
+                    else:
+                        add_live_log(clean_line)
+                    parse_inventory_info(clean_line)
                     if f_log:
                         f_log.write(line)
                         f_log.flush()
@@ -104,11 +113,15 @@ def run_proc_and_capture(cmd_str, log_file=None, report_id=None):
                 if not p.startswith('-') and p not in ['sudo', 'stdbuf', '-oL', '-eL']:
                     mission_name = p.split('/')[-1].replace('"','')
                     break
-                    
-            add_live_log(f"✅ MISSION COMPLETE: {mission_name.upper()}", "success")
             
-            if report_id:
-                reporter.update_status(report_id, "Completed")
+            if proc.returncode != 0:
+                add_live_log(f"❌ ATTACK FAILED (exit {proc.returncode}): {mission_name.upper()}", "error")
+                if report_id:
+                    reporter.update_status(report_id, "Failed")
+            else:
+                add_live_log(f"✅ MISSION COMPLETE: {mission_name.upper()}", "success")
+                if report_id:
+                    reporter.update_status(report_id, "Completed")
             
         t = threading.Thread(target=capture, daemon=True)
         t.start()
@@ -122,6 +135,12 @@ def gen_log_name(action):
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     clean_action = action.lower().replace(' ', '_')
     return f"{clean_action}_{ts}.txt"
+
+def check_tool(name_or_path):
+    """Return True if the tool/binary is available, False otherwise"""
+    if name_or_path.startswith('/'):
+        return os.path.exists(name_or_path)
+    return shutil.which(name_or_path) is not None
 
 # --- Reporting System ---
 class ReportManager:
@@ -835,6 +854,8 @@ def action_evil_twin():
 @app.route('/api/action/deauth', methods=['POST'])
 def action_display_deauth():
     """Deauth current target"""
+    if not check_tool('aireplay-ng'):
+        return jsonify({'error': 'aireplay-ng not installed. Run: sudo apt install aircrack-ng'}), 400
     if not CURRENT_TARGET:
         return jsonify({'status': 'error', 'message': 'No target selected!'}), 400
         
@@ -901,6 +922,8 @@ def action_restore_hdmi():
 @app.route('/api/action/handshake', methods=['POST'])
 def action_handshake():
     """Capture WPA Handshake"""
+    if not check_tool('airodump-ng'):
+        return jsonify({'error': 'airodump-ng not installed. Run: sudo apt install aircrack-ng'}), 400
     if not CURRENT_TARGET:
         return jsonify({'status': 'error', 'message': 'No target selected!'}), 400
 
@@ -929,6 +952,8 @@ def action_handshake():
 @app.route('/api/action/crack', methods=['POST'])
 def action_crack():
     """Crack latest handshake"""
+    if not check_tool('aircrack-ng'):
+        return jsonify({'error': 'aircrack-ng not installed. Run: sudo apt install aircrack-ng'}), 400
     # Find latest .cap file
     try:
         files = glob.glob(os.path.join(CAPTURES_DIR, '*.cap'))
@@ -939,16 +964,15 @@ def action_crack():
         filename = os.path.basename(latest_cap)
         log_file = gen_log_name("crack")
         
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --crack \"{latest_cap}\""
-        run_proc_and_capture(cmd, log_file=log_file)
-        
-        reporter.add_report(
-            "WIFI (CRACK)", 
-            filename, 
-            "Started", 
+        report = reporter.add_report(
+            "WIFI (CRACK)",
+            filename,
+            "Running",
             "Wordlist attack initiated",
             log_file=log_file
         )
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --crack \"{latest_cap}\""
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         add_live_log(f"CRACKING STARTED: {filename}", "info")
         return jsonify({'status': 'success', 'message': f'Cracking {filename}...'})
     except Exception as e:
@@ -957,6 +981,8 @@ def action_crack():
 @app.route('/api/action/wifite', methods=['POST'])
 def action_wifite():
     """Launch automated Wifite attack"""
+    if not check_tool('wifite'):
+        return jsonify({'error': 'wifite not installed. Run: sudo apt install wifite'}), 400
     log_file = gen_log_name("wifite")
     try:
         report = reporter.add_report(
@@ -1015,21 +1041,22 @@ def action_recon():
 @app.route('/api/action/pmkid', methods=['POST'])
 def action_pmkid():
     """Capture PMKID (Clientless)"""
+    if not check_tool('hcxdumptool'):
+        return jsonify({'error': 'hcxdumptool not installed. Run: sudo apt install hcxdumptool'}), 400
     data = request.get_json() or {}
     duration = data.get('duration', 300)
-    
+
     log_file = gen_log_name("pmkid")
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pmkid {duration}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        
-        reporter.add_report(
-            "WIFI (PMKID)", 
-            "ALL", 
-            "Started", 
+        report = reporter.add_report(
+            "WIFI (PMKID)",
+            "ALL",
+            "Running",
             f"Capture running for {duration}s",
             log_file=log_file
         )
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pmkid {duration}"
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'PMKID capture started ({duration}s)...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1037,21 +1064,22 @@ def action_pmkid():
 @app.route('/api/action/beacon', methods=['POST'])
 def action_beacon():
     """MDK4 Beacon Flood"""
+    if not check_tool('mdk4'):
+        return jsonify({'error': 'mdk4 not installed. Run: sudo apt install mdk4'}), 400
     data = request.get_json() or {}
     ssid_file = data.get('ssid_file', '')
-    
+
     log_file = gen_log_name("beacon")
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon {ssid_file}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        
-        reporter.add_report(
-            "WIFI (BEACON)", 
-            "CHAOS", 
-            "Running", 
+        report = reporter.add_report(
+            "WIFI (BEACON)",
+            "CHAOS",
+            "Running",
             "MDK4 Beacon Flooding active",
             log_file=log_file
         )
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon {ssid_file}"
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': 'Beacon flood started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1059,21 +1087,22 @@ def action_beacon():
 @app.route('/api/action/auth', methods=['POST'])
 def action_auth_flood():
     """MDK4 Auth Flood"""
+    if not check_tool('mdk4'):
+        return jsonify({'error': 'mdk4 not installed. Run: sudo apt install mdk4'}), 400
     data = request.get_json() or {}
     target = data.get('target', '')
-    
+
     log_file = gen_log_name("auth_flood")
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auth {target}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        
-        reporter.add_report(
-            "WIFI (AUTH)", 
-            target or "ALL", 
-            "Running", 
+        report = reporter.add_report(
+            "WIFI (AUTH)",
+            target or "ALL",
+            "Running",
             "MDK4 Authentication Flooding active",
             log_file=log_file
         )
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auth {target}"
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'Auth flood against {target or "ALL"} started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1081,24 +1110,25 @@ def action_auth_flood():
 @app.route('/api/action/pixie', methods=['POST'])
 def action_pixie():
     """WPS Pixie-Dust attack"""
+    if not check_tool('reaver'):
+        return jsonify({'error': 'reaver not installed. Run: sudo apt install reaver'}), 400
     data = request.get_json() or {}
     target = data.get('target', '')
-    
+
     if not target:
         return jsonify({'error': 'Target BSSID required'}), 400
-        
+
     log_file = gen_log_name("pixie")
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pixie {target}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        
-        reporter.add_report(
-            "WIFI (PIXIE)", 
-            target, 
-            "Started", 
+        report = reporter.add_report(
+            "WIFI (PIXIE)",
+            target,
+            "Running",
             "WPS Pixie-Dust attack initiated",
             log_file=log_file
         )
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pixie {target}"
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'Pixie-Dust attack launched on {target}...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1109,6 +1139,8 @@ MITM_TOOLS_SCRIPT = os.path.join(VOIDPWN_DIR, 'scripts', 'network', 'mitm_tools.
 @app.route('/api/action/bettercap', methods=['POST'])
 def action_bettercap():
     """Bettercap full MITM (ARP poison + credential sniff)"""
+    if not check_tool('bettercap'):
+        return jsonify({'error': 'bettercap not installed. Run: sudo apt install bettercap'}), 400
     data = request.get_json() or {}
     target = data.get('target', '')
     interface = data.get('interface', '')
@@ -1119,14 +1151,14 @@ def action_bettercap():
 
     log_file = gen_log_name("bettercap_mitm")
     try:
+        report = reporter.add_report("MITM (BETTERCAP)", target or "SUBNET", "Running",
+                            "ARP poison + credential sniff active", log_file=log_file)
         cmd = f"sudo {MITM_TOOLS_SCRIPT} --bettercap"
         if interface:
             cmd += f" --interface {interface}"
         if target:
             cmd += f" --target {target}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        reporter.add_report("MITM (BETTERCAP)", target or "SUBNET", "Running",
-                            "ARP poison + credential sniff active", log_file=log_file)
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': 'Bettercap MITM started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1135,6 +1167,8 @@ def action_bettercap():
 @app.route('/api/action/sslstrip', methods=['POST'])
 def action_sslstrip():
     """Bettercap SSL strip via http.proxy / hstshijack"""
+    if not check_tool('bettercap'):
+        return jsonify({'error': 'bettercap not installed. Run: sudo apt install bettercap'}), 400
     data = request.get_json() or {}
     target = data.get('target', '')
     interface = data.get('interface', '')
@@ -1144,14 +1178,14 @@ def action_sslstrip():
 
     log_file = gen_log_name("sslstrip")
     try:
+        report = reporter.add_report("MITM (SSL-STRIP)", target or "SUBNET", "Running",
+                            "HTTP proxy + SSL downgrade active", log_file=log_file)
         cmd = f"sudo {MITM_TOOLS_SCRIPT} --sslstrip"
         if interface:
             cmd += f" --interface {interface}"
         if target:
             cmd += f" --target {target}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        reporter.add_report("MITM (SSL-STRIP)", target or "SUBNET", "Running",
-                            "HTTP proxy + SSL downgrade active", log_file=log_file)
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': 'SSL Strip started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1179,12 +1213,12 @@ def action_dnsspoof():
 
     log_file = gen_log_name("dnsspoof")
     try:
+        report = reporter.add_report("MITM (DNS-SPOOF)", f"{domain} → {redirect_ip}", "Running",
+                            f"Spoofing {domain} to {redirect_ip}", log_file=log_file)
         cmd = f"sudo {MITM_TOOLS_SCRIPT} --dnsspoof --domain {domain} --redirect {redirect_ip}"
         if interface:
             cmd += f" --interface {interface}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        reporter.add_report("MITM (DNS-SPOOF)", f"{domain} → {redirect_ip}", "Running",
-                            f"Spoofing {domain} to {redirect_ip}", log_file=log_file)
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'DNS Spoof started: {domain} → {redirect_ip}'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1193,17 +1227,19 @@ def action_dnsspoof():
 @app.route('/api/action/karma', methods=['POST'])
 def action_karma():
     """KARMA rogue AP — responds to all SSID probes"""
+    if not check_tool('bettercap'):
+        return jsonify({'error': 'bettercap not installed. Run: sudo apt install bettercap'}), 400
     data = request.get_json() or {}
     interface = data.get('interface', '')
 
     log_file = gen_log_name("karma")
     try:
+        report = reporter.add_report("WIFI (KARMA)", interface or "AUTO", "Running",
+                            "KARMA rogue AP active — responding to all probes", log_file=log_file)
         cmd = f"sudo {MITM_TOOLS_SCRIPT} --karma"
         if interface:
             cmd += f" --interface {interface}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        reporter.add_report("WIFI (KARMA)", interface or "AUTO", "Running",
-                            "KARMA rogue AP active — responding to all probes", log_file=log_file)
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': 'KARMA AP started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1212,6 +1248,8 @@ def action_karma():
 @app.route('/api/action/eaphammer', methods=['POST'])
 def action_eaphammer():
     """WPA Enterprise rogue AP via eaphammer"""
+    if not check_tool('/opt/eaphammer/eaphammer'):
+        return jsonify({'error': 'eaphammer not found at /opt/eaphammer. Run: sudo scripts/core/build_voidpwn.sh'}), 400
     data = request.get_json() or {}
     ssid = data.get('ssid', 'Corporate-WiFi').strip()
     interface = data.get('interface', '')
@@ -1222,12 +1260,12 @@ def action_eaphammer():
 
     log_file = gen_log_name("eaphammer")
     try:
+        report = reporter.add_report("WIFI (ENTERPRISE)", ssid, "Running",
+                            f"WPA Enterprise rogue AP broadcasting as '{ssid}'", log_file=log_file)
         cmd = f"sudo {MITM_TOOLS_SCRIPT} --eaphammer --ssid \"{ssid}\""
         if interface:
             cmd += f" --interface {interface}"
-        run_proc_and_capture(cmd, log_file=log_file)
-        reporter.add_report("WIFI (ENTERPRISE)", ssid, "Running",
-                            f"WPA Enterprise rogue AP broadcasting as '{ssid}'", log_file=log_file)
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'Enterprise AP \"{ssid}\" started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1236,6 +1274,8 @@ def action_eaphammer():
 @app.route('/api/action/pcredz', methods=['POST'])
 def action_pcredz():
     """Parse credentials from capture files via PCredz"""
+    if not check_tool('/opt/pcredz/Pcredz.py'):
+        return jsonify({'error': 'PCredz not found at /opt/pcredz. Run: sudo scripts/core/build_voidpwn.sh'}), 400
     data = request.get_json() or {}
     capture_file = data.get('capture_file', '').strip()
 
@@ -1252,12 +1292,12 @@ def action_pcredz():
 
     log_file = gen_log_name("pcredz")
     try:
+        report = reporter.add_report("FORENSIC (PCREDZ)", safe_file_path or "LATEST CAPTURE", "Running",
+                            "Parsing capture for plaintext credentials", log_file=log_file)
         cmd = f"sudo {MITM_TOOLS_SCRIPT} --pcredz"
         if safe_file_path:
             cmd += f" --file \"{safe_file_path}\""
-        run_proc_and_capture(cmd, log_file=log_file)
-        reporter.add_report("FORENSIC (PCREDZ)", safe_file_path or "LATEST CAPTURE", "Running",
-                            "Parsing capture for plaintext credentials", log_file=log_file)
+        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': 'PCredz analysis started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

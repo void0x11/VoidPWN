@@ -236,6 +236,20 @@ body.reports-active .sidebar {
     white-space: nowrap;
 }
 
+#tab-reports td.failed {
+    color: #ff4444;
+    font-weight: bold;
+}
+
+#tab-reports td.completed {
+    color: var(--accent);
+}
+
+#tab-reports td.running,
+#tab-reports td.started {
+    color: var(--primary);
+}
+
 /* Panels */
 .panel {
     background: var(--panel-bg);

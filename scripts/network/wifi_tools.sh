@@ -186,7 +186,12 @@ disable_monitor_mode() {
 scan_networks() {
     local duration="${1:-15}"
     local output_file="${2:-$OUTPUT_DIR/scan_results}"
-    
+
+    if ! command -v airodump-ng &>/dev/null; then
+        log_error "airodump-ng not found. Install with: sudo apt install aircrack-ng"
+        exit 1
+    fi
+
     enable_monitor_mode
     
     log_info "Scanning for WiFi networks for ${duration}s..."
@@ -201,12 +206,21 @@ capture_handshake() {
     local bssid="$1"
     local channel="$2"
     local essid="$3"
-    
+
     if [[ -z "$bssid" ]] || [[ -z "$channel" ]]; then
         log_error "Usage: $0 --handshake <BSSID> <CHANNEL> [ESSID]"
         exit 1
     fi
-    
+
+    if ! command -v airodump-ng &>/dev/null; then
+        log_error "airodump-ng not found. Install with: sudo apt install aircrack-ng"
+        exit 1
+    fi
+    if ! command -v aireplay-ng &>/dev/null; then
+        log_error "aireplay-ng not found. Install with: sudo apt install aircrack-ng"
+        exit 1
+    fi
+
     enable_monitor_mode
     
     local output_file="$OUTPUT_DIR/handshake_$(date +%Y%m%d_%H%M%S)"
@@ -238,6 +252,11 @@ capture_handshake() {
 
 # Automated attack with Wifite
 auto_attack() {
+    if ! command -v wifite &>/dev/null; then
+        log_error "wifite not found. Install with: sudo apt install wifite"
+        exit 1
+    fi
+
     enable_monitor_mode
     
     log_info "Starting automated WiFi attack with Wifite..."
@@ -266,12 +285,17 @@ deauth_attack() {
     local bssid="$1"
     local count="${2:-0}"  # 0 = continuous
     local channel="$3"
-    
+
     if [[ -z "$bssid" ]]; then
         log_error "Usage: $0 --deauth <BSSID> [COUNT] [CHANNEL]"
         exit 1
     fi
-    
+
+    if ! command -v aireplay-ng &>/dev/null; then
+        log_error "aireplay-ng not found. Install with: sudo apt install aircrack-ng"
+        exit 1
+    fi
+
     enable_monitor_mode
     
     if [[ -n "$channel" ]]; then
@@ -340,14 +364,19 @@ evil_twin() {
 crack_handshake() {
     local cap_file="$1"
     local wordlist="${2:-$WORDLIST}"
-    
+
     if [[ -z "$cap_file" ]]; then
         log_error "Usage: $0 --crack <CAP_FILE> [WORDLIST]"
         exit 1
     fi
-    
+
     if [[ ! -f "$cap_file" ]]; then
         log_error "File not found: $cap_file"
+        exit 1
+    fi
+
+    if ! command -v aircrack-ng &>/dev/null; then
+        log_error "aircrack-ng not found. Install with: sudo apt install aircrack-ng"
         exit 1
     fi
 
@@ -370,7 +399,16 @@ crack_handshake() {
 pmkid_capture() {
     local interface="$1"
     local duration="${2:-300}" # Default 5 mins
-    
+
+    if ! command -v hcxdumptool &>/dev/null; then
+        log_error "hcxdumptool not found. Install with: sudo apt install hcxdumptool"
+        exit 1
+    fi
+    if ! command -v hcxpcapngtool &>/dev/null; then
+        log_warning "hcxpcapngtool not found (install hcxtools for hash conversion). Capture will still run."
+    fi
+
+    enable_monitor_mode
     [[ -z "$interface" ]] && interface="$MONITOR_INTERFACE"
     
     log_info "Starting PMKID capture on $interface for $duration seconds..."
@@ -396,7 +434,13 @@ pmkid_capture() {
 mdk4_beacon_flood() {
     local interface="$1"
     local ssid_file="$2"
-    
+
+    if ! command -v mdk4 &>/dev/null; then
+        log_error "mdk4 not found. Install with: sudo apt install mdk4"
+        exit 1
+    fi
+
+    enable_monitor_mode
     [[ -z "$interface" ]] && interface="$MONITOR_INTERFACE"
     
     log_info "Starting MDK4 Beacon Flood on $interface..."
@@ -413,7 +457,13 @@ mdk4_beacon_flood() {
 mdk4_auth_flood() {
     local interface="$1"
     local bssid="$2"
-    
+
+    if ! command -v mdk4 &>/dev/null; then
+        log_error "mdk4 not found. Install with: sudo apt install mdk4"
+        exit 1
+    fi
+
+    enable_monitor_mode
     [[ -z "$interface" ]] && interface="$MONITOR_INTERFACE"
     
     if [[ -n "$bssid" ]]; then
@@ -429,12 +479,17 @@ mdk4_auth_flood() {
 wps_pixie_dust() {
     local bssid="$1"
     local interface="$2"
-    
+
     if [[ -z "$bssid" ]]; then
         log_error "Usage: $0 --pixie <BSSID> [INTERFACE]"
         exit 1
     fi
-    
+
+    if ! command -v reaver &>/dev/null; then
+        log_error "reaver not found. Install with: sudo apt install reaver"
+        exit 1
+    fi
+
     [[ -z "$interface" ]] && interface="$MONITOR_INTERFACE"
     
     log_info "Starting WPS Pixie-Dust attack against $bssid..."
