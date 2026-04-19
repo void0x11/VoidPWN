@@ -97,12 +97,23 @@ log_info "Installing Advanced Frameworks (SET, Empire)..."
 apt install -y set powershell-empire
 
 # Forensics, RE, & Mobile
-install_tool_group "Forensics" "autopsy sleuthkit volatility3 binwalk foremost exiftool"
+# Note: volatility3 is a Python tool, not available via apt — installed via pip below
+install_tool_group "Forensics" "autopsy sleuthkit binwalk foremost exiftool"
 install_tool_group "Reverse Engineering" "radare2 ghidra"
 install_tool_group "Mobile Analysis" "apktool dex2jar jadx"
 
 # Python Advanced
-install_python_tool "wifiphisher"
+# volatility3: not in apt, install via pip
+install_python_tool "volatility3"
+
+# wifiphisher: pip install broken on Python 3 (roguehostapd uses Python 2 ConfigParser)
+# Clone from git instead
+if [ ! -d "/opt/wifiphisher" ]; then
+    log_info "Cloning Wifiphisher from git..."
+    git clone https://github.com/wifiphisher/wifiphisher.git /opt/wifiphisher || log_warning "Failed to clone Wifiphisher. Skipping..."
+else
+    log_info "Wifiphisher already cloned."
+fi
 
 # Fluxion
 if [ ! -d "/opt/fluxion" ]; then
