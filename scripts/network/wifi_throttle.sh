@@ -13,7 +13,14 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-INTERFACE="wlan0"
+# Auto-detect wireless interface (prefer wlan1 for external adapter)
+if iwconfig 2>/dev/null | grep -q "^wlan1"; then
+    INTERFACE="wlan1"
+elif iwconfig 2>/dev/null | grep -q "^wlan0"; then
+    INTERFACE="wlan0"
+else
+    INTERFACE=$(iwconfig 2>&1 | grep "IEEE 802.11" | awk '{print $1}' | head -n 1)
+fi
 
 check_root() {
     if [[ $EUID -ne 0 ]]; then

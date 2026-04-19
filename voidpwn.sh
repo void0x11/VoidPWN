@@ -100,7 +100,13 @@ wifi_menu() {
                 read -p "Channel: " channel
                 sudo "$SCRIPT_DIR/scripts/network/wifi_tools.sh" --handshake "$bssid" "$channel"
                 ;;
-            3) sudo "$SCRIPT_DIR/scripts/network/wifi_tools.sh" --auto-attack ;;
+            3)
+                if ! iwconfig 2>/dev/null | grep -qE "^wlan[0-9]"; then
+                    log_error "No WiFi adapter detected. Connect an adapter and try again."
+                else
+                    sudo "$SCRIPT_DIR/scripts/network/wifi_tools.sh" --auto-attack
+                fi
+                ;;
             4)
                 read -p "BSSID: " bssid
                 read -p "Count (0=continuous): " count
@@ -221,7 +227,16 @@ password_menu() {
                 ;;
             4)
                 read -p "Hash file: " hashfile
-                john "$hashfile" --wordlist=/usr/share/wordlists/rockyou.txt
+                ROCKYOU="/usr/share/wordlists/rockyou.txt"
+                if [[ ! -f "$ROCKYOU" ]] && [[ -f "${ROCKYOU}.gz" ]]; then
+                    log_warning "rockyou.txt not found. Decompressing..."
+                    gunzip -k "${ROCKYOU}.gz"
+                fi
+                if [[ ! -f "$ROCKYOU" ]]; then
+                    log_error "rockyou.txt not found. Run: gunzip /usr/share/wordlists/rockyou.txt.gz"
+                else
+                    john "$hashfile" --wordlist="$ROCKYOU"
+                fi
                 ;;
             5)
                 echo "Hashcat example: hashcat -m 0 -a 0 hashes.txt wordlist.txt"

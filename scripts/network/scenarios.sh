@@ -28,6 +28,33 @@ log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1"; }
 
+# Detect the live monitor-mode interface
+detect_monitor_interface() {
+    local iface
+    iface=$(iwconfig 2>/dev/null | grep 'Mode:Monitor' | awk '{print $1}' | head -n 1)
+    if [[ -z "$iface" ]]; then
+        log_error "No interface in monitor mode found. Run --monitor-on first."
+        exit 1
+    fi
+    echo "$iface"
+}
+
+# Find a usable gobuster wordlist
+find_wordlist() {
+    local candidates=(
+        "/usr/share/wordlists/dirb/common.txt"
+        "/usr/share/dirb/wordlists/common.txt"
+        "/usr/share/wordlists/gobuster/common.txt"
+        "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt"
+    )
+    for wl in "${candidates[@]}"; do
+        [[ -f "$wl" ]] && { echo "$wl"; return 0; }
+    done
+    # Last resort: find any common.txt under wordlists
+    find /usr/share/wordlists -name 'common.txt' 2>/dev/null | head -n 1
+    return 1
+}
+
 # Banner
 print_banner() {
     clear
@@ -77,7 +104,9 @@ scenario_wifi_audit() {
     
     # Scan networks
     log_info "Scanning networks..."
-    timeout ${duration}m airodump-ng -w "$output/scan" --output-format csv wlan1mon &
+    local mon_iface
+    mon_iface=$(detect_monitor_interface)
+    timeout ${duration}m airodump-ng -w "$output/scan" --output-format csv "$mon_iface" &
     SCAN_PID=$!
     
     # Wait for scan
@@ -155,7 +184,13 @@ scenario_network_sweep() {
     local host_count=$(echo "$hosts" | wc -l)
     
     log_success "Found $host_count hosts"
-    
+
+    if [[ -z "$hosts" ]]; then
+        log_error "No live hosts discovered. Aborting scan."
+        read -p "Press Enter to continue..."
+        return
+    fi
+
     # Port scan
     log_info "[2/4] Scanning ports on $host_count hosts..."
     nmap -sV -sC -p- $hosts -oA "$output/02_port_scan"
@@ -245,14 +280,21 @@ scenario_web_hunt() {
     
     # Enumerate each web server
     log_info "[2/4] Enumerating web servers..."
+    local wordlist
+    wordlist=$(find_wordlist)
+    if [[ -z "$wordlist" ]]; then
+        log_warning "No wordlist found — skipping directory enumeration"
+    fi
     for host in $web_hosts; do
         log_info "Scanning $host..."
         
         # Directory enumeration
-        gobuster dir -u "http://$host" \
-            -w /usr/share/wordlists/dirb/common.txt \
-            -o "$output/gobuster_$host.txt" \
-            -q 2>/dev/null || true
+        if [[ -n "$wordlist" ]]; then
+            gobuster dir -u "http://$host" \
+                -w "$wordlist" \
+                -o "$output/gobuster_$host.txt" \
+                -q 2>/dev/null || true
+        fi
         
         # Technology detection
         whatweb "http://$host" > "$output/whatweb_$host.txt" 2>/dev/null || true
@@ -414,7 +456,13 @@ scenario_quick_assessment() {
     local host_count=$(echo "$hosts" | wc -l)
     
     log_success "Found $host_count hosts"
-    
+
+    if [[ -z "$hosts" ]]; then
+        log_error "No live hosts discovered. Aborting scan."
+        read -p "Press Enter to continue..."
+        return
+    fi
+
     # Top ports scan
     log_info "[2/3] Scanning top 1000 ports..."
     nmap -sV -T4 --top-ports 1000 $hosts -oA "$output/02_ports"
