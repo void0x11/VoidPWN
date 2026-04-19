@@ -1103,6 +1103,166 @@ def action_pixie():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# --- MITM & Credential Intercept Endpoints ---
+MITM_TOOLS_SCRIPT = os.path.join(VOIDPWN_DIR, 'scripts', 'network', 'mitm_tools.sh')
+
+@app.route('/api/action/bettercap', methods=['POST'])
+def action_bettercap():
+    """Bettercap full MITM (ARP poison + credential sniff)"""
+    data = request.get_json() or {}
+    target = data.get('target', '')
+    interface = data.get('interface', '')
+
+    # Validate optional target IP
+    if target and not re.match(r'^[0-9]{1,3}(?:\.[0-9]{1,3}){3}$', target):
+        return jsonify({'error': 'Invalid target IP'}), 400
+
+    log_file = gen_log_name("bettercap_mitm")
+    try:
+        cmd = f"sudo {MITM_TOOLS_SCRIPT} --bettercap"
+        if interface:
+            cmd += f" --interface {interface}"
+        if target:
+            cmd += f" --target {target}"
+        run_proc_and_capture(cmd, log_file=log_file)
+        reporter.add_report("MITM (BETTERCAP)", target or "SUBNET", "Running",
+                            "ARP poison + credential sniff active", log_file=log_file)
+        return jsonify({'status': 'success', 'message': 'Bettercap MITM started...'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/action/sslstrip', methods=['POST'])
+def action_sslstrip():
+    """Bettercap SSL strip via http.proxy / hstshijack"""
+    data = request.get_json() or {}
+    target = data.get('target', '')
+    interface = data.get('interface', '')
+
+    if target and not re.match(r'^[0-9]{1,3}(?:\.[0-9]{1,3}){3}$', target):
+        return jsonify({'error': 'Invalid target IP'}), 400
+
+    log_file = gen_log_name("sslstrip")
+    try:
+        cmd = f"sudo {MITM_TOOLS_SCRIPT} --sslstrip"
+        if interface:
+            cmd += f" --interface {interface}"
+        if target:
+            cmd += f" --target {target}"
+        run_proc_and_capture(cmd, log_file=log_file)
+        reporter.add_report("MITM (SSL-STRIP)", target or "SUBNET", "Running",
+                            "HTTP proxy + SSL downgrade active", log_file=log_file)
+        return jsonify({'status': 'success', 'message': 'SSL Strip started...'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/action/dnsspoof', methods=['POST'])
+def action_dnsspoof():
+    """Bettercap DNS spoofing"""
+    data = request.get_json() or {}
+    domain = data.get('domain', '').strip()
+    redirect_ip = data.get('redirect_ip', '').strip()
+    interface = data.get('interface', '')
+
+    # Both fields required
+    if not domain or not redirect_ip:
+        return jsonify({'error': 'Both domain and redirect_ip are required'}), 400
+
+    # Validate domain (alphanumeric, dots, hyphens only)
+    if not re.match(r'^[a-zA-Z0-9.\-]+$', domain):
+        return jsonify({'error': 'Invalid domain format'}), 400
+
+    # Validate redirect IP
+    if not re.match(r'^[0-9]{1,3}(?:\.[0-9]{1,3}){3}$', redirect_ip):
+        return jsonify({'error': 'Invalid redirect IP'}), 400
+
+    log_file = gen_log_name("dnsspoof")
+    try:
+        cmd = f"sudo {MITM_TOOLS_SCRIPT} --dnsspoof --domain {domain} --redirect {redirect_ip}"
+        if interface:
+            cmd += f" --interface {interface}"
+        run_proc_and_capture(cmd, log_file=log_file)
+        reporter.add_report("MITM (DNS-SPOOF)", f"{domain} → {redirect_ip}", "Running",
+                            f"Spoofing {domain} to {redirect_ip}", log_file=log_file)
+        return jsonify({'status': 'success', 'message': f'DNS Spoof started: {domain} → {redirect_ip}'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/action/karma', methods=['POST'])
+def action_karma():
+    """KARMA rogue AP — responds to all SSID probes"""
+    data = request.get_json() or {}
+    interface = data.get('interface', '')
+
+    log_file = gen_log_name("karma")
+    try:
+        cmd = f"sudo {MITM_TOOLS_SCRIPT} --karma"
+        if interface:
+            cmd += f" --interface {interface}"
+        run_proc_and_capture(cmd, log_file=log_file)
+        reporter.add_report("WIFI (KARMA)", interface or "AUTO", "Running",
+                            "KARMA rogue AP active — responding to all probes", log_file=log_file)
+        return jsonify({'status': 'success', 'message': 'KARMA AP started...'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/action/eaphammer', methods=['POST'])
+def action_eaphammer():
+    """WPA Enterprise rogue AP via eaphammer"""
+    data = request.get_json() or {}
+    ssid = data.get('ssid', 'Corporate-WiFi').strip()
+    interface = data.get('interface', '')
+
+    # Basic SSID sanitization
+    if not re.match(r'^[a-zA-Z0-9 .\-_]{1,32}$', ssid):
+        return jsonify({'error': 'Invalid SSID (max 32 chars, alphanumeric/space/.-_)'}), 400
+
+    log_file = gen_log_name("eaphammer")
+    try:
+        cmd = f"sudo {MITM_TOOLS_SCRIPT} --eaphammer --ssid \"{ssid}\""
+        if interface:
+            cmd += f" --interface {interface}"
+        run_proc_and_capture(cmd, log_file=log_file)
+        reporter.add_report("WIFI (ENTERPRISE)", ssid, "Running",
+                            f"WPA Enterprise rogue AP broadcasting as '{ssid}'", log_file=log_file)
+        return jsonify({'status': 'success', 'message': f'Enterprise AP \"{ssid}\" started...'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/action/pcredz', methods=['POST'])
+def action_pcredz():
+    """Parse credentials from capture files via PCredz"""
+    data = request.get_json() or {}
+    capture_file = data.get('capture_file', '').strip()
+
+    # If a specific file is provided, validate it (basename only, no path traversal)
+    safe_file_path = ''
+    if capture_file:
+        safe_name = os.path.basename(capture_file)
+        # Only allow valid capture file extensions
+        if not re.match(r'^[\w\-. ]+\.(cap|pcap|pcapng)$', safe_name):
+            return jsonify({'error': 'Invalid capture file name'}), 400
+        safe_file_path = os.path.join(CAPTURES_DIR, safe_name)
+        if not os.path.isfile(safe_file_path):
+            return jsonify({'error': f'Capture file not found: {safe_name}'}), 404
+
+    log_file = gen_log_name("pcredz")
+    try:
+        cmd = f"sudo {MITM_TOOLS_SCRIPT} --pcredz"
+        if safe_file_path:
+            cmd += f" --file \"{safe_file_path}\""
+        run_proc_and_capture(cmd, log_file=log_file)
+        reporter.add_report("FORENSIC (PCREDZ)", safe_file_path or "LATEST CAPTURE", "Running",
+                            "Parsing capture for plaintext credentials", log_file=log_file)
+        return jsonify({'status': 'success', 'message': 'PCredz analysis started...'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # --- Automated Scenario Endpoints ---
 def run_scenario(name, cmd):
     """Helper to run a scenario and log it"""

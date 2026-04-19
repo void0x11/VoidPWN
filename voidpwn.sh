@@ -271,7 +271,8 @@ exploit_menu() {
         echo -e "  ${CYAN}[1]${NC} Metasploit Framework"
         echo -e "  ${CYAN}[2]${NC} SQLMap"
         echo -e "  ${CYAN}[3]${NC} Responder"
-        echo -e "  ${CYAN}[4]${NC} Bettercap"
+        echo -e "  ${CYAN}[4]${NC} Bettercap (Interactive)"
+        echo -e "  ${CYAN}[5]${NC} MITM Toolkit"
         echo -e "  ${CYAN}[0]${NC} Back"
         echo ""
         read -p "$(echo -e ${GREEN}Select option: ${NC})" choice
@@ -289,10 +290,93 @@ exploit_menu() {
                 [[ -z "$eth_iface" ]] && eth_iface="eth0"
                 sudo responder -I "$eth_iface" ;;
             4) sudo bettercap ;;
+            5) mitm_menu ;;
             0) break ;;
             *) echo -e "${RED}Invalid option${NC}" ;;
         esac
         
+        echo ""
+        read -p "Press Enter to continue..."
+    done
+}
+
+# MITM & Credential Intercept menu
+mitm_menu() {
+    local MITM_SCRIPT="$SCRIPT_DIR/scripts/network/mitm_tools.sh"
+    if [[ ! -f "$MITM_SCRIPT" ]]; then
+        log_error "mitm_tools.sh not found at $MITM_SCRIPT"
+        return 1
+    fi
+
+    while true; do
+        print_banner
+        echo -e "${RED}╔════════════════════════════════════╗${NC}"
+        echo -e "${RED}║    MITM & Credential Intercept     ║${NC}"
+        echo -e "${RED}╚════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "  ${CYAN}[1]${NC} Bettercap MITM       ${RED}(ARP poison + sniff)${NC}"
+        echo -e "  ${CYAN}[2]${NC} SSL Strip             ${RED}(downgrade HTTPS → HTTP)${NC}"
+        echo -e "  ${CYAN}[3]${NC} DNS Spoof             ${RED}(redirect any domain)${NC}"
+        echo -e "  ${CYAN}[4]${NC} KARMA Rogue AP        ${RED}(respond to all SSID probes)${NC}"
+        echo -e "  ${CYAN}[5]${NC} WPA Enterprise AP     ${RED}(harvest domain creds)${NC}"
+        echo -e "  ${CYAN}[6]${NC} Analyze Captures      ${RED}(PCredz: extract creds from .cap)${NC}"
+        echo -e "  ${CYAN}[0]${NC} Back"
+        echo ""
+        read -p "$(echo -e ${GREEN}Select option: ${NC})" choice
+
+        case $choice in
+            1)
+                read -p "Interface (leave blank = auto): " mitm_iface
+                read -p "Target IP (leave blank = full subnet): " mitm_target
+                local mitm_args="--bettercap"
+                [[ -n "$mitm_iface" ]]  && mitm_args+=" --interface $mitm_iface"
+                [[ -n "$mitm_target" ]] && mitm_args+=" --target $mitm_target"
+                sudo "$MITM_SCRIPT" $mitm_args
+                ;;
+            2)
+                read -p "Interface (leave blank = auto): " mitm_iface
+                read -p "Target IP (leave blank = full subnet): " mitm_target
+                local ssl_args="--sslstrip"
+                [[ -n "$mitm_iface" ]]  && ssl_args+=" --interface $mitm_iface"
+                [[ -n "$mitm_target" ]] && ssl_args+=" --target $mitm_target"
+                sudo "$MITM_SCRIPT" $ssl_args
+                ;;
+            3)
+                read -p "Interface (leave blank = auto): " mitm_iface
+                read -p "Domain to spoof (e.g. google.com): " dns_domain
+                read -p "Redirect to IP: " dns_redir
+                if [[ -z "$dns_domain" || -z "$dns_redir" ]]; then
+                    log_error "Domain and redirect IP are required"
+                else
+                    local dns_args="--dnsspoof --domain $dns_domain --redirect $dns_redir"
+                    [[ -n "$mitm_iface" ]] && dns_args+=" --interface $mitm_iface"
+                    sudo "$MITM_SCRIPT" $dns_args
+                fi
+                ;;
+            4)
+                read -p "Interface (leave blank = auto): " mitm_iface
+                local karma_args="--karma"
+                [[ -n "$mitm_iface" ]] && karma_args+=" --interface $mitm_iface"
+                sudo "$MITM_SCRIPT" $karma_args
+                ;;
+            5)
+                read -p "Interface (leave blank = auto): " mitm_iface
+                read -p "SSID to broadcast (default: Corporate-WiFi): " ent_ssid
+                ent_ssid="${ent_ssid:-Corporate-WiFi}"
+                local ent_args="--eaphammer --ssid \"$ent_ssid\""
+                [[ -n "$mitm_iface" ]] && ent_args+=" --interface $mitm_iface"
+                sudo "$MITM_SCRIPT" $ent_args
+                ;;
+            6)
+                read -p "Capture file path (leave blank = use latest): " cap_path
+                local pcredz_args="--pcredz"
+                [[ -n "$cap_path" ]] && pcredz_args+=" --file \"$cap_path\""
+                sudo "$MITM_SCRIPT" $pcredz_args
+                ;;
+            0) break ;;
+            *) echo -e "${RED}Invalid option${NC}" ;;
+        esac
+
         echo ""
         read -p "Press Enter to continue..."
     done
@@ -478,7 +562,7 @@ run_diagnostics() {
 
     # 1. Dependency Check
     echo -e "${CYAN}[*] Checking Dependencies...${NC}"
-    local tools=("nmap" "aircrack-ng" "wifite" "python3" "iwconfig")
+    local tools=("nmap" "aircrack-ng" "wifite" "python3" "iwconfig" "bettercap")
     local missing=0
     for tool in "${tools[@]}"; do
         if command -v $tool &> /dev/null; then
@@ -488,6 +572,20 @@ run_diagnostics() {
              missing=1
         fi
     done
+
+    # MITM Toolkit dependencies
+    echo ""
+    echo -e "${CYAN}[*] Checking MITM Toolkit...${NC}"
+    if [[ -d /opt/eaphammer ]]; then
+        echo -e "  [${GREEN}OK${NC}] eaphammer found at /opt/eaphammer"
+    else
+        echo -e "  [${YELLOW}WARN${NC}] eaphammer not found (run build_voidpwn.sh to install)"
+    fi
+    if [[ -d /opt/pcredz ]]; then
+        echo -e "  [${GREEN}OK${NC}] PCredz found at /opt/pcredz"
+    else
+        echo -e "  [${YELLOW}WARN${NC}] PCredz not found (run build_voidpwn.sh to install)"
+    fi
 
     # 2. Interface Check
     echo ""

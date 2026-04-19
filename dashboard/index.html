@@ -157,6 +157,34 @@
 
                         <div class="panel">
                             <div class="panel-header">
+                                <h2>MITM &amp; Credential Intercept</h2>
+                            </div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                <button class="btn" style="border-color:#ff4444; color:#ff4444"
+                                    onclick="runAction('bettercap')">BETTERCAP MITM</button>
+                                <button class="btn" style="border-color:#ff4444; color:#ff4444"
+                                    onclick="runAction('sslstrip')">SSL STRIP</button>
+                                <button class="btn" style="border-color:#ff8800; color:#ff8800"
+                                    onclick="openDnsSpoofModal()">DNS SPOOF</button>
+                                <button class="btn" style="border-color:#ff8800; color:#ff8800"
+                                    onclick="runAction('karma')">KARMA AP</button>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>Enterprise &amp; Forensics</h2>
+                            </div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                <button class="btn" style="border-color:var(--secondary); color:var(--secondary)"
+                                    onclick="runAction('eaphammer')">WPA ENTERPRISE</button>
+                                <button class="btn secondary"
+                                    onclick="runAction('pcredz')">ANALYZE CAPTURES</button>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
                                 <h2>Bandwidth Throttling</h2>
                             </div>
                             <div style="display:flex; gap:10px; align-items:center;">
@@ -478,6 +506,33 @@
             </div>
             <pre id="log-viewer-content"
                 style="flex:1; overflow-y:auto; background:rgba(0,0,0,0.5); padding:15px; font-family:var(--font-mono); font-size:0.8rem; color:#0e9; border:1px solid var(--border); border-radius:4px;"></pre>
+        </div>
+    </div>
+
+    <!-- DNS Spoof Modal -->
+    <div class="modal-overlay" id="dnsspoof-modal" onclick="closeDnsSpoofModal(event)">
+        <div class="modal" onclick="event.stopPropagation()" style="max-width:460px; width:95%;">
+            <div class="panel-header" style="margin-bottom:20px;">
+                <h2 style="color:#ff8800">DNS SPOOF CONFIG</h2>
+                <button class="btn" style="padding:5px 12px; font-size:0.7rem;" onclick="closeDnsSpoofModal()">CLOSE</button>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:18px;">
+                Redirect any domain to an attacker-controlled IP via ARP poison + DNS spoof.
+            </div>
+            <div style="margin-bottom:14px;">
+                <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:5px;">TARGET DOMAIN</div>
+                <input id="dnsspoof-domain" type="text" placeholder="e.g. example.com"
+                    onclick="showKeyboard('dnsspoof-domain')"
+                    style="width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); padding:10px; border-radius:4px; font-family:var(--font-mono); font-size:0.85rem; box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:20px;">
+                <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom:5px;">REDIRECT TO IP</div>
+                <input id="dnsspoof-redirect" type="text" placeholder="e.g. 192.168.1.1"
+                    onclick="showKeyboard('dnsspoof-redirect')"
+                    style="width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); padding:10px; border-radius:4px; font-family:var(--font-mono); font-size:0.85rem; box-sizing:border-box;">
+            </div>
+            <button class="btn" style="width:100%; border-color:#ff8800; color:#ff8800; padding:12px;"
+                onclick="runDnsSpoof()">LAUNCH DNS SPOOF</button>
         </div>
     </div>
 

@@ -147,6 +147,51 @@ fi
 
 log_success "Arsenal fully provisioned."
 
+# --- 2b. MITM Toolkit Installation ---
+log_step "PHASE 2b: MITM & Credential Intercept Tools"
+
+install_mitm_tools() {
+    # eaphammer — WPA Enterprise rogue AP (harvests MSCHAPV2/PEAP domain credentials)
+    if [[ ! -d /opt/eaphammer ]]; then
+        if command -v git &>/dev/null; then
+            log_info "Cloning eaphammer..."
+            git clone https://github.com/s0lst1c3/eaphammer /opt/eaphammer || \
+                log_warning "Failed to clone eaphammer. Skipping..."
+            if [[ -d /opt/eaphammer && -f /opt/eaphammer/requirements.txt ]]; then
+                pip3 install -r /opt/eaphammer/requirements.txt 2>/dev/null || \
+                    log_warning "eaphammer pip deps had issues — some features may not work"
+                chmod +x /opt/eaphammer/eaphammer 2>/dev/null || true
+            fi
+        else
+            log_warning "git not found, cannot install eaphammer. Skipping..."
+        fi
+    else
+        log_info "eaphammer already installed at /opt/eaphammer"
+    fi
+
+    # PCredz — parse plaintext credentials from .cap/.pcap captures
+    if [[ ! -d /opt/pcredz ]]; then
+        if command -v git &>/dev/null; then
+            log_info "Cloning PCredz..."
+            git clone https://github.com/lgandx/PCredz /opt/pcredz || \
+                log_warning "Failed to clone PCredz. Skipping..."
+            if [[ -d /opt/pcredz ]]; then
+                pip3 install -r /opt/pcredz/requirements.txt 2>/dev/null || \
+                    log_warning "PCredz pip deps had issues — some protocols may not be parsed"
+                chmod +x /opt/pcredz/Pcredz.py 2>/dev/null || true
+            fi
+        else
+            log_warning "git not found, cannot install PCredz. Skipping..."
+        fi
+    else
+        log_info "PCredz already installed at /opt/pcredz"
+    fi
+}
+
+install_mitm_tools
+
+log_success "MITM toolkit provisioned."
+
 # --- 3. Platform Configuration ---
 log_step "PHASE 3: Service & Autostart Configuration"
 

@@ -374,7 +374,7 @@ async function runAction(action, data = {}) {
     const wifiTarget = state.selectedNetwork ? state.selectedNetwork.bssid : null;
 
     // Determine target based on action type
-    const wifiActions = ['deauth', 'evil_twin', 'handshake', 'pmkid', 'pixie', 'auth', 'wifite'];
+    const wifiActions = ['deauth', 'evil_twin', 'handshake', 'pmkid', 'pixie', 'auth', 'wifite', 'karma', 'eaphammer'];
     let target = wifiActions.includes(action) ? wifiTarget : ipTarget;
 
     // Special handling for Crack: doesn't strictly need a live target if file exists
@@ -403,8 +403,20 @@ async function runAction(action, data = {}) {
         return alert("Select a Device or Subnet Target!");
     }
 
-    if (wifiActions.includes(action) && !target && !['pmkid', 'wifite', 'beacon', 'auth'].includes(action)) {
+    if (wifiActions.includes(action) && !target && !['pmkid', 'wifite', 'beacon', 'auth', 'karma', 'eaphammer'].includes(action)) {
         return alert("Select a WiFi Network Target!");
+    }
+
+    // bettercap / sslstrip / pcredz: pass optional target, don't require one
+    if (['bettercap', 'sslstrip', 'pcredz'].includes(action)) {
+        data.target = ipTarget || undefined;
+        target = 'MITM';
+    }
+
+    // eaphammer: pass ssid from selected wifi network
+    if (action === 'eaphammer' && state.selectedNetwork) {
+        data.ssid = state.selectedNetwork.essid || 'Corporate-WiFi';
+        target = data.ssid;
     }
 
     log(`INITIATING ${action.toUpperCase()}...`);
@@ -705,6 +717,38 @@ function openDeviceModal(id) {
 
 function closeModal() {
     document.getElementById('device-modal').classList.remove('active');
+}
+
+// --- DNS Spoof Modal ---
+function openDnsSpoofModal() {
+    document.getElementById('dnsspoof-domain').value = '';
+    document.getElementById('dnsspoof-redirect').value = '';
+    document.getElementById('dnsspoof-modal').classList.add('active');
+}
+
+function closeDnsSpoofModal(e) {
+    if (e && e.target !== document.getElementById('dnsspoof-modal')) return;
+    document.getElementById('dnsspoof-modal').classList.remove('active');
+}
+
+async function runDnsSpoof() {
+    const domain = document.getElementById('dnsspoof-domain').value.trim();
+    const redirectIp = document.getElementById('dnsspoof-redirect').value.trim();
+
+    if (!domain || !redirectIp) {
+        alert('Both domain and redirect IP are required.');
+        return;
+    }
+
+    document.getElementById('dnsspoof-modal').classList.remove('active');
+    log(`INITIATING DNS SPOOF: ${escHtml(domain)} → ${escHtml(redirectIp)}...`);
+
+    const res = await api('/api/action/dnsspoof', 'POST', { domain, redirect_ip: redirectIp });
+    if (res.status === 'success') {
+        log(`✓ DNS SPOOF started: ${escHtml(domain)} → ${escHtml(redirectIp)}`, 'success');
+    } else {
+        log(`ERROR: ${escHtml(res.error || res.message)}`, 'error');
+    }
 }
 
 async function saveDeviceMetadata() {
