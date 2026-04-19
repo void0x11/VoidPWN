@@ -13,10 +13,12 @@ import json
 import csv
 import fcntl
 import shutil
+import socket
 from datetime import datetime
 import re
 import urllib.request
 import urllib.parse
+import urllib.error
 
 try:
     import psutil
@@ -141,6 +143,15 @@ def check_tool(name_or_path):
     if name_or_path.startswith('/'):
         return os.path.exists(name_or_path)
     return shutil.which(name_or_path) is not None
+
+def check_internet(host="8.8.8.8", port=53, timeout=3):
+    """Quick TCP connectivity check — does not require DNS"""
+    try:
+        socket.setdefaulttimeout(timeout)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        return True
+    except (socket.error, OSError):
+        return False
 
 # --- Reporting System ---
 class ReportManager:
@@ -1616,6 +1627,10 @@ REQUESTED REPORT SECTIONS:
 
 Write the full professional security report now, covering each requested section. Be specific and actionable."""
 
+    # Pre-flight: check internet connectivity before attempting API call
+    if not check_internet():
+        return jsonify({'error': 'No internet connection. AI Analysis requires internet access to reach the LLM API. Connect the Pi to the internet and try again.'}), 502
+
     try:
         if provider == 'gemini':
             analysis = call_gemini(api_key, prompt)
@@ -1629,9 +1644,18 @@ Write the full professional security report now, covering each requested section
         return jsonify({'analysis': analysis})
     except urllib.error.HTTPError as e:
         body = e.read().decode('utf-8', errors='replace')
-        return jsonify({'error': f'LLM API error ({e.code}): {body[:300]}'}), 502
+        if e.code in (401, 403):
+            return jsonify({'error': f'API key rejected by {provider} (HTTP {e.code}). Check your key in System > AI Configuration.'}), 502
+        if e.code == 429:
+            return jsonify({'error': f'Rate limit exceeded on {provider}. Wait a moment and try again.'}), 502
+        return jsonify({'error': f'LLM API error (HTTP {e.code}): {body[:200]}'}), 502
+    except (socket.gaierror, socket.timeout, OSError) as e:
+        return jsonify({'error': 'No internet connection. AI Analysis requires internet access to reach the LLM API. Connect the Pi to the internet and try again.'}), 502
     except Exception as e:
-        return jsonify({'error': f'Failed to contact LLM: {str(e)}'}), 502
+        err_str = str(e)
+        if 'Name or service not known' in err_str or 'Temporary failure' in err_str or 'Errno -3' in err_str or 'urlopen error' in err_str:
+            return jsonify({'error': 'No internet connection. AI Analysis requires internet access to reach the LLM API. Connect the Pi to the internet and try again.'}), 502
+        return jsonify({'error': f'LLM request failed: {err_str}'}), 502
 
 
 if __name__ == '__main__':
