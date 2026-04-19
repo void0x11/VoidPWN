@@ -1514,7 +1514,7 @@ def summarize_log(content, max_lines=3000):
 
 
 def call_gemini(api_key, prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096}
@@ -1644,10 +1644,26 @@ Write the full professional security report now, covering each requested section
         return jsonify({'analysis': analysis})
     except urllib.error.HTTPError as e:
         body = e.read().decode('utf-8', errors='replace')
-        if e.code in (401, 403):
-            return jsonify({'error': f'API key rejected by {provider} (HTTP {e.code}). Check your key in System > AI Configuration.'}), 502
-        if e.code == 429:
-            return jsonify({'error': f'Rate limit exceeded on {provider}. Wait a moment and try again.'}), 502
+        # Try to extract a clean message from the JSON error body
+        clean_msg = None
+        try:
+            err_json = json.loads(body)
+            # Gemini: {"error": {"message": "..."}}
+            # OpenAI/Groq: {"error": {"message": "..."}}
+            clean_msg = (err_json.get('error') or {}).get('message')
+        except Exception:
+            pass
+
+        # Classify by status code + message content
+        body_lower = (clean_msg or body).lower()
+        if 'expired' in body_lower or 'api key expired' in body_lower:
+            return jsonify({'error': f'Your {provider} API key has expired. Go to System > AI Configuration and update it.'}), 502
+        if e.code in (401, 403) or 'invalid' in body_lower or 'unauthorized' in body_lower or 'api key' in body_lower:
+            return jsonify({'error': f'Invalid or rejected API key for {provider}. Go to System > AI Configuration and check your key.'}), 502
+        if e.code == 429 or 'quota' in body_lower or 'rate limit' in body_lower:
+            return jsonify({'error': f'Rate limit / quota exceeded on {provider}. Wait a moment and try again.'}), 502
+        if clean_msg:
+            return jsonify({'error': f'{provider} error: {clean_msg}'}), 502
         return jsonify({'error': f'LLM API error (HTTP {e.code}): {body[:200]}'}), 502
     except (socket.gaierror, socket.timeout, OSError) as e:
         return jsonify({'error': 'No internet connection. AI Analysis requires internet access to reach the LLM API. Connect the Pi to the internet and try again.'}), 502
