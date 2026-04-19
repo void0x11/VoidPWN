@@ -107,7 +107,17 @@ install_wifi_tools() {
     
     # Advanced Wireless Tools
     log_info "Installing wifiphisher..."
-    pip3 install wifiphisher --break-system-packages || pip3 install wifiphisher
+    # wifiphisher pip install broken on Python 3 (roguehostapd uses Python 2 ConfigParser)
+    # Clone from git instead
+    if [ ! -d "/opt/wifiphisher" ]; then
+        if command -v git &>/dev/null; then
+            git clone https://github.com/wifiphisher/wifiphisher.git /opt/wifiphisher || log_warning "Failed to clone wifiphisher. Skipping..."
+        else
+            log_warning "git not found, cannot clone wifiphisher. Skipping..."
+        fi
+    else
+        log_info "Wifiphisher already cloned."
+    fi
     
     log_info "Installing fluxion..."
     if [ ! -d "/opt/fluxion" ]; then
@@ -182,13 +192,15 @@ install_web_tools() {
 install_forensics_tools() {
     log_info "Installing forensics tools..."
     
+    # Note: volatility3 is a Python package, not available via apt — installed separately via pip
     apt install -y \
         autopsy \
         sleuthkit \
-        volatility3 \
         binwalk \
         foremost \
         exiftool
+
+    pip3 install volatility3 --break-system-packages || log_warning "volatility3 pip install failed. Skipping..."
     
     log_success "Forensics tools installed"
 }
@@ -270,17 +282,34 @@ install_pisugar() {
 # Configure auto-login
 configure_autologin() {
     log_info "Configuring auto-login..."
-    
+
+    # Detect the real user (the one who invoked sudo)
+    local target_user
+    if [[ -n "$SUDO_USER" ]]; then
+        target_user="$SUDO_USER"
+    elif [[ -n "$LOGNAME" && "$LOGNAME" != "root" ]]; then
+        target_user="$LOGNAME"
+    else
+        target_user=$(getent passwd | awk -F: '$3>=1000 && $3<65534 {print $1; exit}')
+    fi
+
+    if [[ -z "$target_user" ]]; then
+        log_warning "Could not detect target user for auto-login. Skipping."
+        return
+    fi
+
+    log_info "Configuring auto-login for user: $target_user"
+
     # Create autologin service
     mkdir -p /etc/systemd/system/getty@tty1.service.d/
-    cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << EOF
+    cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << AUTOLOGIN
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty --autologin kali --noclear %I \$TERM
-EOF
-    
+ExecStart=-/sbin/agetty --autologin ${target_user} --noclear %I \$TERM
+AUTOLOGIN
+
     systemctl enable getty@tty1.service
-    log_success "Auto-login configured"
+    log_success "Auto-login configured for $target_user"
 }
 
 # Optimize power settings

@@ -29,8 +29,28 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-USER_NAME="${SUDO_USER:-kali}"
+# Detect the real user (the one who called sudo)
+if [[ -n "$SUDO_USER" ]]; then
+    USER_NAME="$SUDO_USER"
+elif [[ -n "$LOGNAME" && "$LOGNAME" != "root" ]]; then
+    USER_NAME="$LOGNAME"
+else
+    # Last resort: find first non-root non-system user
+    USER_NAME=$(getent passwd | awk -F: '$3>=1000 && $3<65534 {print $1; exit}')
+fi
+
+if [[ -z "$USER_NAME" ]]; then
+    log_error "Cannot determine the target user. Run with sudo or set SUDO_USER."
+    exit 1
+fi
+
 USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6)
+if [[ -z "$USER_HOME" ]]; then
+    log_error "User '$USER_NAME' not found in passwd. Aborting."
+    exit 1
+fi
+
+log_info "Targeting user: $USER_NAME (home: $USER_HOME)"
 VOIDPWN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 clear
@@ -94,7 +114,7 @@ install_tool_group "Network Recon" "nmap masscan wireshark tshark ettercap-text-
 
 # Frameworks & Specialized Tools
 log_info "Installing Advanced Frameworks (SET, Empire)..."
-apt install -y set powershell-empire
+apt install -y set powershell-empire || log_warning "SET/Empire install had issues. Continuing..."
 
 # Forensics, RE, & Mobile
 # Note: volatility3 is a Python tool, not available via apt — installed via pip below
@@ -117,8 +137,12 @@ fi
 
 # Fluxion
 if [ ! -d "/opt/fluxion" ]; then
-    log_info "Cloning Fluxion..."
-    git clone https://github.com/FluxionNetwork/fluxion.git /opt/fluxion
+    if command -v git &>/dev/null; then
+        log_info "Cloning Fluxion..."
+        git clone https://github.com/FluxionNetwork/fluxion.git /opt/fluxion || log_warning "Failed to clone Fluxion. Skipping..."
+    else
+        log_warning "git not found, cannot clone Fluxion. Skipping..."
+    fi
 fi
 
 log_success "Arsenal fully provisioned."

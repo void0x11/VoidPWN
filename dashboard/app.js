@@ -70,12 +70,26 @@ function initRefresh() {
     setInterval(refreshSystemInfo, 5000);
 }
 
+// --- Security: HTML escape to prevent XSS ---
+function escHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // --- API Helper ---
 async function api(path, method = 'GET', body = null) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
     try {
         const options = {
             method,
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
         };
         if (body) options.body = JSON.stringify(body);
 
@@ -84,6 +98,8 @@ async function api(path, method = 'GET', body = null) {
     } catch (err) {
         console.error(`API Error (${path}):`, err);
         return { error: err.message };
+    } finally {
+        clearTimeout(timeout);
     }
 }
 
@@ -132,7 +148,7 @@ function renderDeviceList() {
         subnetCard.style.borderColor = 'var(--secondary)';
         subnetCard.innerHTML = `
             <div style="font-size:0.6rem; color:var(--secondary); text-transform:uppercase">Active Network</div>
-            <div class="ip">${state.selectedNetwork.cidr || state.selectedNetwork.ssid}</div>
+            <div class="ip">${escHtml(state.selectedNetwork.cidr || state.selectedNetwork.ssid)}</div>
             <div class="host">Broadcasting / Subnet</div>
         `;
         container.appendChild(subnetCard);
@@ -145,15 +161,15 @@ function renderDeviceList() {
         const card = document.createElement('div');
         card.className = `device-card ${state.selectedDevice?.id === device.id ? 'selected' : ''}`;
 
-        let tagsHtml = device.tags ? device.tags.map(t => `<span class="tag">${t}</span>`).join('') : '';
+        let tagsHtml = device.tags ? device.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join('') : '';
 
         card.innerHTML = `
-            <div class="ip">${device.ip}</div>
-            <div class="host">${device.hostname || 'Unknown Host'}</div>
+            <div class="ip">${escHtml(device.ip)}</div>
+            <div class="host">${escHtml(device.hostname || 'Unknown Host')}</div>
             <div class="tag-container">${tagsHtml}</div>
             <div class="card-actions">
-                <button class="btn-mini" onclick="event.stopPropagation(); selectDeviceByID('${device.id}')">TARGET</button>
-                <button class="btn-mini" onclick="event.stopPropagation(); openDeviceModal('${device.id}')">DETAILS</button>
+                <button class="btn-mini" onclick="event.stopPropagation(); selectDeviceByID('${escHtml(device.id)}')">TARGET</button>
+                <button class="btn-mini" onclick="event.stopPropagation(); openDeviceModal('${escHtml(device.id)}')">DETAILS</button>
             </div>
         `;
         card.onclick = () => selectDevice(device);
@@ -316,13 +332,13 @@ async function loadWiFiResults() {
 
             card.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-weight:bold">${net.essid || '<HIDDEN>'}</span>
-                    <span style="color:var(--text-dim); font-size:0.7rem">${net.power} dBm</span>
+                    <span style="font-weight:bold">${escHtml(net.essid) || '&lt;HIDDEN&gt;'}</span>
+                    <span style="color:var(--text-dim); font-size:0.7rem">${escHtml(net.power)} dBm</span>
                 </div>
-                <div style="font-size:0.7rem; color:var(--primary); font-family:var(--font-mono)">${net.bssid}</div>
+                <div style="font-size:0.7rem; color:var(--primary); font-family:var(--font-mono)">${escHtml(net.bssid)}</div>
                 <div style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:5px">
-                    <span>CH: ${net.channel}</span>
-                    <span>${net.privacy}</span>
+                    <span>CH: ${escHtml(net.channel)}</span>
+                    <span>${escHtml(net.privacy)}</span>
                 </div>
             `;
             card.onclick = () => selectWiFiNetwork(net.bssid, net.essid, net.channel);
@@ -450,7 +466,7 @@ function log(msg, type = '') {
     const time = new Date().toLocaleTimeString([], { hour12: false });
     const entry = document.createElement('div');
     entry.className = `log-entry ${type}`;
-    entry.innerHTML = `<span class="time">[${time}]</span> <span class="msg">${msg}</span>`;
+    entry.innerHTML = `<span class="time">[${time}]</span> <span class="msg">${escHtml(msg)}</span>`;
 
     container.appendChild(entry);
     container.scrollTop = container.scrollHeight;
@@ -471,7 +487,7 @@ async function pollLiveLogs() {
         res.logs.forEach(l => {
             const entry = document.createElement('div');
             entry.className = `log-entry ${l.type}`;
-            entry.innerHTML = `<span class="time">[${l.time}]</span> <span class="msg">${l.msg}</span>`;
+            entry.innerHTML = `<span class="time">[${l.time}]</span> <span class="msg">${escHtml(l.msg)}</span>`;
             container.appendChild(entry);
         });
         container.scrollTop = container.scrollHeight;

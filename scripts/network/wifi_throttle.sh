@@ -13,13 +13,27 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Auto-detect wireless interface (prefer wlan1 for external adapter)
-if iwconfig 2>/dev/null | grep -q "^wlan1"; then
-    INTERFACE="wlan1"
-elif iwconfig 2>/dev/null | grep -q "^wlan0"; then
-    INTERFACE="wlan0"
-else
-    INTERFACE=$(iwconfig 2>&1 | grep "IEEE 802.11" | awk '{print $1}' | head -n 1)
+# Auto-detect wireless interface using iw (handles wlan*, wlp*, wlx* naming)
+detect_interface() {
+    local ifaces
+    ifaces=$(iw dev 2>/dev/null | awk '/Interface/{print $2}')
+    if [[ -z "$ifaces" ]]; then
+        ifaces=$(ip link show 2>/dev/null | awk -F': ' '/^[0-9]+: wl/{print $2}')
+    fi
+    if [[ -z "$ifaces" ]]; then
+        echo ""
+        return 1
+    fi
+    # Prefer non-wlan0 (usually the external pentest adapter)
+    local preferred
+    preferred=$(echo "$ifaces" | grep -v '^wlan0$' | head -n 1)
+    echo "${preferred:-$(echo "$ifaces" | head -n 1)}"
+}
+
+INTERFACE=$(detect_interface)
+if [[ -z "$INTERFACE" ]]; then
+    echo -e "${RED}[!] No wireless interface detected. Connect an adapter and try again.${NC}"
+    exit 1
 fi
 
 check_root() {
@@ -49,9 +63,11 @@ cleanup() {
     echo ""
     echo -e "${YELLOW}[*] Cleaning up...${NC}"
     # Stop ARP spoofing
-    pkill arpspoof
-    # Reset traffic control
-    tc qdisc del dev $INTERFACE root 2>/dev/null
+    pkill arpspoof 2>/dev/null || true
+    # Reset traffic control (only if INTERFACE is set)
+    if [[ -n "$INTERFACE" ]]; then
+        tc qdisc del dev "$INTERFACE" root 2>/dev/null || true
+    fi
     # Disable forwarding
     echo 0 > /proc/sys/net/ipv4/ip_forward
     echo -e "${GREEN}[+] Done${NC}"

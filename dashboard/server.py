@@ -11,6 +11,7 @@ import os
 import glob
 import json
 import csv
+import fcntl
 from datetime import datetime
 import re
 import urllib.request
@@ -140,7 +141,9 @@ class ReportManager:
     def _save(self):
         try:
             with open(self.filepath, 'w') as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
                 json.dump(self.reports, f, indent=2)
+                fcntl.flock(f, fcntl.LOCK_UN)
         except Exception as e:
             print(f"Failed to save report: {e}")
 
@@ -187,7 +190,9 @@ class DeviceManager:
     def _save(self):
         try:
             with open(self.filepath, 'w') as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
                 json.dump(self.devices, f, indent=2)
+                fcntl.flock(f, fcntl.LOCK_UN)
         except Exception as e:
             print(f"Failed to save devices: {e}")
 
@@ -300,16 +305,32 @@ def get_system_info():
         except:
             uptime = 'N/A'
         
-        # Get temperature
+        # Get temperature — try Pi-specific first, fall back to thermal zone
         try:
-            temp_result = subprocess.run(['vcgencmd', 'measure_temp'], capture_output=True, text=True)
-            temp = temp_result.stdout.strip().replace('temp=', '') if temp_result.stdout else 'N/A'
+            temp_result = subprocess.run(['vcgencmd', 'measure_temp'], capture_output=True, text=True, timeout=3)
+            if temp_result.returncode == 0 and temp_result.stdout:
+                temp = temp_result.stdout.strip().replace('temp=', '')
+            else:
+                raise FileNotFoundError
         except:
-            temp = 'N/A'
+            try:
+                with open('/sys/class/thermal/thermal_zone0/temp', 'r') as tf:
+                    temp = f"{int(tf.read().strip()) / 1000:.1f}'C"
+            except:
+                temp = 'N/A'
         
-        # Check WiFi adapter
-        iwconfig_result = subprocess.run(['iwconfig'], capture_output=True, text=True, stderr=subprocess.STDOUT)
-        adapter = 'DETECTED' if 'wlan1' in iwconfig_result.stdout else 'NOT FOUND'
+        # Check WiFi adapter using iw (works with any naming convention)
+        try:
+            iw_result = subprocess.run(['iw', 'dev'], capture_output=True, text=True, timeout=3)
+            ifaces = [l.split()[-1] for l in iw_result.stdout.splitlines() if 'Interface' in l]
+            adapter = 'DETECTED' if ifaces else 'NOT FOUND'
+        except:
+            # Fallback to iwconfig
+            try:
+                iw_result = subprocess.run(['iwconfig'], capture_output=True, text=True, stderr=subprocess.STDOUT, timeout=3)
+                adapter = 'DETECTED' if re.search(r'IEEE 802\.11', iw_result.stdout) else 'NOT FOUND'
+            except:
+                adapter = 'UNKNOWN'
         
         if psutil:
             # Get CPU usage
@@ -962,6 +983,15 @@ def action_recon():
     
     if not target:
         return jsonify({'error': 'Target required'}), 400
+
+    # Sanitize target: allow only IPs, CIDRs, and simple domain names
+    if not re.match(r'^[a-zA-Z0-9\.\-\/: ]+$', target) or len(target) > 100:
+        return jsonify({'error': 'Invalid target format'}), 400
+        
+    # Sanitize mode to whitelist only
+    allowed_modes = {'quick', 'full', 'stealth', 'vuln', 'web', 'smb', 'dns', 'discover', 'comprehensive'}
+    if mode not in allowed_modes:
+        return jsonify({'error': 'Invalid mode'}), 400
         
     try:
         log_file = gen_log_name(f"recon_{mode}")

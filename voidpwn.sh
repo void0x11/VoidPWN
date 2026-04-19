@@ -35,18 +35,27 @@ EOF
 
 # System info
 show_system_info() {
-    local ip=$(hostname -I | awk '{print $1}')
-    local uptime=$(uptime -p | sed 's/up //')
-    local temp=$(vcgencmd measure_temp 2>/dev/null | cut -d= -f2 || echo "N/A")
+    local ip
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    local uptime
+    uptime=$(uptime -p 2>/dev/null | sed 's/up //' || echo "N/A")
+    local temp
+    if [[ -f /sys/class/thermal/thermal_zone0/temp ]]; then
+        temp=$(awk '{printf "%.1f'\''C", $1/1000}' /sys/class/thermal/thermal_zone0/temp)
+    else
+        temp=$(vcgencmd measure_temp 2>/dev/null | cut -d= -f2 || echo "N/A")
+    fi
     
     echo -e "${BLUE}[System Info]${NC}"
-    echo -e "  IP Address: ${GREEN}$ip${NC}"
-    echo -e "  Uptime: ${GREEN}$uptime${NC}"
-    echo -e "  Temperature: ${GREEN}$temp${NC}"
+    echo -e "  IP Address: ${GREEN}${ip:-N/A}${NC}"
+    echo -e "  Uptime: ${GREEN}${uptime}${NC}"
+    echo -e "  Temperature: ${GREEN}${temp}${NC}"
     
-    # Check WiFi adapter
-    if iwconfig 2>/dev/null | grep -q "wlan1"; then
-        echo -e "  WiFi Adapter: ${GREEN}✓ Connected${NC}"
+    # Check WiFi adapter using iw (works with any naming convention)
+    local wifi_iface
+    wifi_iface=$(iw dev 2>/dev/null | awk '/Interface/{print $2}' | head -n 1)
+    if [[ -n "$wifi_iface" ]]; then
+        echo -e "  WiFi Adapter: ${GREEN}✓ $wifi_iface${NC}"
     else
         echo -e "  WiFi Adapter: ${RED}✗ Not detected${NC}"
     fi
@@ -273,7 +282,12 @@ exploit_menu() {
                 read -p "Target URL: " url
                 sqlmap -u "$url" --batch
                 ;;
-            3) sudo responder -I eth0 ;;
+            3) 
+                local eth_iface
+                eth_iface=$(ip route 2>/dev/null | awk '/default/{print $5; exit}')
+                [[ -z "$eth_iface" ]] && eth_iface=$(ip link show 2>/dev/null | awk -F': ' '/^[0-9]+: e/{print $2; exit}')
+                [[ -z "$eth_iface" ]] && eth_iface="eth0"
+                sudo responder -I "$eth_iface" ;;
             4) sudo bettercap ;;
             0) break ;;
             *) echo -e "${RED}Invalid option${NC}" ;;
@@ -304,10 +318,10 @@ system_menu() {
         read -p "$(echo -e ${GREEN}Select option: ${NC})" choice
         
         case $choice in
-            1) neofetch || screenfetch || uname -a ;;
+            1) neofetch 2>/dev/null || screenfetch 2>/dev/null || uname -a ;;
             2) ip a ;;
             3) df -h ;;
-            4) htop ;;
+            4) htop 2>/dev/null || top ;;
             5) sudo apt update && sudo apt upgrade -y ;;
             6)
                 read -p "Reboot now? (y/n): " confirm
@@ -353,21 +367,32 @@ python_menu() {
         case $choice in
             1) 
                 read -p "Enter target IP: " target
-                sudo python3 "$SCRIPT_DIR/scripts/python/smart_scan.py" "$target"
+                if [[ ! -f "$SCRIPT_DIR/scripts/python/smart_scan.py" ]]; then
+                    log_error "smart_scan.py not found in $SCRIPT_DIR/scripts/python/"
+                else
+                    sudo python3 "$SCRIPT_DIR/scripts/python/smart_scan.py" "$target"
+                fi
                 ;;
             2) 
                 echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
-                sudo python3 "$SCRIPT_DIR/scripts/python/packet_visualizer.py"
+                if [[ ! -f "$SCRIPT_DIR/scripts/python/packet_visualizer.py" ]]; then
+                    log_error "packet_visualizer.py not found in $SCRIPT_DIR/scripts/python/"
+                else
+                    sudo python3 "$SCRIPT_DIR/scripts/python/packet_visualizer.py"
+                fi
                 ;;
             3)
-                ifconfig | grep -q "monitor"
-                if [ $? -ne 0 ]; then
+                local iface
+                iface=$(iw dev 2>/dev/null | awk '/type monitor/{f=NR} f && /Interface/{print $2; f=0}' | head -1)
+                if [[ -z "$iface" ]]; then
                     read -p "Monitor interface (e.g., wlan1mon): " iface
-                else
-                    iface=$(iw dev | grep Interface | grep mon | awk '{print $2}' | head -1)
                 fi
                 echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
-                sudo python3 "$SCRIPT_DIR/scripts/python/wifi_monitor.py" "$iface"
+                if [[ ! -f "$SCRIPT_DIR/scripts/python/wifi_monitor.py" ]]; then
+                    log_error "wifi_monitor.py not found in $SCRIPT_DIR/scripts/python/"
+                else
+                    sudo python3 "$SCRIPT_DIR/scripts/python/wifi_monitor.py" "$iface"
+                fi
                 ;;
             4)
                  sudo "$SCRIPT_DIR/scripts/network/wifi_throttle.sh"
@@ -433,11 +458,11 @@ view_captures() {
     echo ""
     
     echo -e "${CYAN}WiFi Captures:${NC}"
-    ls -lh "$HOME/VoidPWN/captures/" 2>/dev/null || echo "  No captures found"
+    ls -lh "$SCRIPT_DIR/output/captures/" 2>/dev/null || echo "  No captures found"
     echo ""
     
     echo -e "${CYAN}Recon Results:${NC}"
-    ls -lh "$HOME/VoidPWN/recon/" 2>/dev/null || echo "  No results found"
+    ls -lh "$SCRIPT_DIR/output/recon/" 2>/dev/null || echo "  No results found"
     echo ""
     
     read -p "Press Enter to continue..."
@@ -467,17 +492,19 @@ run_diagnostics() {
     # 2. Interface Check
     echo ""
     echo -e "${CYAN}[*] Checking Network Interfaces...${NC}"
-    if iwconfig 2>/dev/null | grep -q "monitor"; then
+    if iw dev 2>/dev/null | awk '/type/{print}' | grep -q monitor; then
          echo -e "  [${YELLOW}WARN${NC}] One or more interfaces in Monitor Mode"
     fi
 
-    # Check for external adapter (heuristic: often wlan1)
-    if iwconfig 2>/dev/null | grep -q "wlan1"; then
-         echo -e "  [${GREEN}OK${NC}] External Adapter (wlan1) detected"
-    elif iwconfig 2>/dev/null | grep -q "wlan0"; then
-         echo -e "  [${YELLOW}INFO${NC}] Only internal WiFi (wlan0) detected"
+    # Show all detected wireless interfaces
+    local wifi_ifaces
+    wifi_ifaces=$(iw dev 2>/dev/null | awk '/Interface/{print $2}')
+    if [[ -n "$wifi_ifaces" ]]; then
+        local count
+        count=$(echo "$wifi_ifaces" | wc -l)
+        echo -e "  [${GREEN}OK${NC}] $count wireless interface(s) detected: $(echo $wifi_ifaces | tr '\n' ' ')"
     else
-         echo -e "  [${RED}FAIL${NC}] No wireless interfaces found!"
+        echo -e "  [${RED}FAIL${NC}] No wireless interfaces found!"
     fi
 
     # 3. Service Status

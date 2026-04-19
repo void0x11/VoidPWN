@@ -14,11 +14,12 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Directories
+# Directories — resolve project root dynamically from SCRIPT_DIR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTPUT_DIR="$HOME/VoidPWN/output/scenarios"
-CAPTURES_DIR="$HOME/VoidPWN/output/captures"
-RECON_DIR="$HOME/VoidPWN/output/recon"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+OUTPUT_DIR="$PROJECT_ROOT/output/scenarios"
+CAPTURES_DIR="$PROJECT_ROOT/output/captures"
+RECON_DIR="$PROJECT_ROOT/output/recon"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
