@@ -374,7 +374,7 @@ async function runAction(action, data = {}) {
     const wifiTarget = state.selectedNetwork ? state.selectedNetwork.bssid : null;
 
     // Determine target based on action type
-    const wifiActions = ['deauth', 'evil_twin', 'handshake', 'pmkid', 'pixie', 'auth', 'wifite', 'karma', 'eaphammer'];
+    const wifiActions = ['deauth', 'evil_twin', 'handshake', 'pmkid', 'pixie', 'auth', 'wifite', 'eaphammer'];
     let target = wifiActions.includes(action) ? wifiTarget : ipTarget;
 
     // Special handling for Crack: doesn't strictly need a live target if file exists
@@ -403,12 +403,12 @@ async function runAction(action, data = {}) {
         return alert("Select a Device or Subnet Target!");
     }
 
-    if (wifiActions.includes(action) && !target && !['pmkid', 'wifite', 'beacon', 'auth', 'karma', 'eaphammer'].includes(action)) {
+    if (wifiActions.includes(action) && !target && !['pmkid', 'wifite', 'beacon', 'auth', 'eaphammer'].includes(action)) {
         return alert("Select a WiFi Network Target!");
     }
 
-    // bettercap / sslstrip / pcredz: pass optional target, don't require one
-    if (['bettercap', 'sslstrip', 'pcredz'].includes(action)) {
+    // bettercap / pcredz: pass optional target, don't require one
+    if (['bettercap', 'pcredz'].includes(action)) {
         data.target = ipTarget || undefined;
         target = 'MITM';
     }
@@ -449,25 +449,280 @@ async function switchToTFT() {
     }
 }
 
-async function runScenario(scenario) {
-    let target = state.selectedDevice ? state.selectedDevice.ip : null;
+// ============================================================
+// HexStrike AI Integration
+// ============================================================
+const hs = {
+    chain: [],         // current attack chain steps
+    missionId: null,   // uuid for this mission
+    logFile: null,     // server-side log filename
+    executing: false,
+    pollInterval: null,
+    currentStep: 0
+};
 
-    // Fallback to subnet if no device is selected
-    if (!target && state.selectedNetwork) {
-        target = state.selectedNetwork.cidr;
-    }
-
-    if (!target) return alert("Select a Device or Subnet Target!");
-
-    log(`EXECUTING SCENARIO: ${scenario.toUpperCase()}...`);
-
-    const res = await api(`/api/scenario/${scenario}`, 'POST', { target });
-    if (res.status === 'success') {
-        log(`✓ Scenario ${scenario} running`, 'success');
-        switchTab('reports');
+// Poll HexStrike status when tab becomes active
+const _origSwitchTab = switchTab;
+function switchTab(tabId) {
+    _origSwitchTab(tabId);
+    if (tabId === 'hexstrike') {
+        hexstrikeStatus();
     } else {
-        log(`FAILED: ${res.error}`, 'error');
+        // Stop process polling when leaving HexStrike tab
+        if (hs.pollInterval) {
+            clearInterval(hs.pollInterval);
+            hs.pollInterval = null;
+        }
     }
+}
+
+async function hexstrikeStatus() {
+    const badge = document.getElementById('hs-badge');
+    if (!badge) return;
+    badge.className = 'hexstrike-badge offline';
+    badge.textContent = '● CHECKING...';
+    const res = await api('/api/hexstrike/status');
+    if (res.online) {
+        badge.className = 'hexstrike-badge online';
+        badge.textContent = `● ONLINE  (${res.tool_count || '?'} tools)`;
+    } else {
+        badge.className = 'hexstrike-badge offline';
+        badge.textContent = '● OFFLINE';
+    }
+}
+
+async function hexstrikeStartServer() {
+    log('⬡ Starting HexStrike AI Engine...', 'info');
+    const res = await api('/api/hexstrike/start', 'POST');
+    if (res.error) {
+        log(`⬡ ERROR: ${res.error}`, 'error');
+        return;
+    }
+    log(`⬡ Engine starting (PID ${res.pid || '?'})...`, 'info');
+    // Give it a moment then check status
+    setTimeout(hexstrikeStatus, 2000);
+}
+
+async function hexstrikeStopServer() {
+    const res = await api('/api/hexstrike/stop', 'POST');
+    log(`⬡ HexStrike Engine: ${res.status}`, 'info');
+    await hexstrikeStatus();
+}
+
+async function hexstrikeAnalyze() {
+    const target = document.getElementById('hs-target')?.value.trim();
+    const objective = document.getElementById('hs-objective')?.value || 'comprehensive';
+    const btn = document.getElementById('hs-analyze-btn');
+
+    if (!target) {
+        log('⬡ Enter a target before analyzing.', 'error');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'ANALYZING...';
+    log(`⬡ HexStrike analyzing: ${escHtml(target)} [${objective}]...`, 'info');
+
+    const res = await api('/api/hexstrike/analyze', 'POST', { target, objective });
+
+    btn.disabled = false;
+    btn.textContent = '⬡ ANALYZE TARGET';
+
+    if (res.error) {
+        log(`⬡ ANALYZE ERROR: ${res.error}`, 'error');
+        return;
+    }
+
+    // Show intelligence report
+    _renderIntelReport(res.target_profile);
+
+    // Store and render chain
+    hs.chain = res.chain || [];
+    hs.missionId = null;
+    hs.currentStep = 0;
+    _renderChain(hs.chain);
+
+    const prob = res.success_probability ? ` | Chain probability: ${(res.success_probability * 100).toFixed(0)}%` : '';
+    const eta = res.estimated_time ? ` | ETA: ~${res.estimated_time}s` : '';
+    log(`⬡ DecisionEngine chain ready: ${hs.chain.length} step(s)${prob}${eta}. Review and click EXECUTE MISSION.`, 'success');
+}
+
+function _renderIntelReport(profile) {
+    const panel = document.getElementById('hs-intel-panel');
+    const content = document.getElementById('hs-intel-content');
+    if (!panel || !content || !profile) return;
+
+    const items = [
+        { label: 'Target', value: profile.target || '—' },
+        { label: 'Type', value: profile.type || 'unknown' },
+        { label: 'Risk Level', value: profile.risk_level || 'unknown' },
+        { label: 'Attack Surface', value: profile.attack_surface_score || 'N/A' },
+        { label: 'Confidence', value: profile.confidence || 'N/A' },
+        { label: 'Technologies', value: (profile.technologies || []).join(', ') || 'N/A' }
+    ];
+
+    content.innerHTML = items.map(i => `
+        <div class="hexstrike-intel-item">
+            <div class="hexstrike-intel-label">${escHtml(i.label)}</div>
+            <div class="hexstrike-intel-value">${escHtml(String(i.value))}</div>
+        </div>
+    `).join('');
+
+    panel.style.display = '';
+}
+
+const TOOL_CATEGORIES = {
+    nmap: 'scan', rustscan: 'scan', masscan: 'scan',
+    gobuster: 'fuzz', dirb: 'fuzz', ffuf: 'fuzz', nikto: 'fuzz',
+    sqlmap: 'exploit', metasploit: 'exploit', hydra: 'password',
+    john: 'password', hashcat: 'password', bettercap: 'exploit',
+    responder: 'exploit', wifite: 'scan'
+};
+
+function _renderChain(chain) {
+    const panel = document.getElementById('hs-chain-panel');
+    const list = document.getElementById('hs-chain-list');
+    if (!panel || !list) return;
+
+    list.innerHTML = chain.map((step, i) => {
+        const cat = TOOL_CATEGORIES[step.tool] || 'scan';
+        const fallbackHtml = step.fallback
+            ? `<span class="chain-step-fallback">fallback: ${escHtml(step.fallback)}</span>` : '';
+        const timingHtml = step.estimated_time
+            ? `<span class="chain-step-timing">~${escHtml(String(step.estimated_time))}s</span>` : '';
+        const probHtml = step.success_probability
+            ? `<span class="chain-step-timing" style="color:var(--accent)">p=${(step.success_probability * 100).toFixed(0)}%</span>` : '';
+        // Summarise the DecisionEngine parameters as readable key=value pairs
+        const params = step.parameters || {};
+        const paramKeys = Object.keys(params).filter(k => k !== 'target' && k !== 'url' && params[k] != null);
+        const paramHtml = paramKeys.length
+            ? `<div class="chain-step-desc" style="font-size:0.65rem;opacity:0.7">${paramKeys.map(k => `${escHtml(k)}: ${escHtml(String(params[k]))}`).join(' &nbsp;|&nbsp; ')}</div>` : '';
+        return `
+            <div class="chain-step ${cat}" id="hs-step-${i}">
+                <div class="chain-step-body">
+                    <div class="chain-step-tool">${escHtml(step.tool)}</div>
+                    <div class="chain-step-desc">${escHtml(step.description || '')}</div>
+                    ${paramHtml}
+                    <div class="chain-step-meta">${timingHtml}${probHtml}${fallbackHtml}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    panel.style.display = '';
+}
+
+async function hexstrikeExecuteChain() {
+    if (!hs.chain.length) {
+        log('⬡ No attack chain. Run ANALYZE TARGET first.', 'error');
+        return;
+    }
+    if (hs.executing) {
+        log('⬡ Mission already running.', 'info');
+        return;
+    }
+
+    const target = document.getElementById('hs-target')?.value.trim();
+    const objective = document.getElementById('hs-objective')?.value || 'comprehensive';
+    if (!target) {
+        log('⬡ Target missing.', 'error');
+        return;
+    }
+
+    hs.executing = true;
+    hs.missionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36);
+    hs.logFile = `hexstrike_mission_${new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)}.txt`;
+    hs.currentStep = 0;
+
+    const btn = document.getElementById('hs-execute-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ EXECUTING...'; }
+
+    const procPanel = document.getElementById('hs-processes-panel');
+    if (procPanel) procPanel.style.display = '';
+
+    // Start process polling
+    hs.pollInterval = setInterval(_pollHexstrikeProcesses, 3000);
+
+    const chainTools = hs.chain.map(s => s.tool);
+
+    for (let i = 0; i < hs.chain.length; i++) {
+        const step = hs.chain[i];
+        hs.currentStep = i;
+
+        // Mark current step as running in UI
+        document.querySelectorAll('.chain-step').forEach(el => el.classList.remove('running'));
+        const stepEl = document.getElementById(`hs-step-${i}`);
+        if (stepEl) stepEl.classList.add('running');
+
+        const counter = document.getElementById('hs-step-counter');
+        if (counter) counter.textContent = `Step ${i + 1} / ${hs.chain.length}`;
+
+        log(`⬡ [${i + 1}/${hs.chain.length}] Running: ${step.tool}...`, 'info');
+
+        const res = await api('/api/hexstrike/execute', 'POST', {
+            target,
+            tool: step.tool,
+            objective,
+            step_index: i,
+            total_steps: hs.chain.length,
+            mission_id: hs.missionId,
+            log_file: hs.logFile,
+            chain_tools: chainTools,
+            step_params: step.parameters || {}   // DecisionEngine optimized params for this tool
+        });
+
+        if (stepEl) {
+            stepEl.classList.remove('running');
+            stepEl.classList.add('done');
+        }
+
+        if (res.error) {
+            log(`⬡ Step ${i + 1} error: ${res.error}`, 'error');
+        } else {
+            log(`⬡ ${step.tool} complete`, 'success');
+        }
+
+        // On last step, AI analysis is ready
+        if (i + 1 >= hs.chain.length && res.ai_analysis) {
+            log('⬡ Gemini AI report generated — check REPORTS tab.', 'success');
+            loadReports();
+        }
+    }
+
+    // Mission complete
+    hs.executing = false;
+    if (hs.pollInterval) { clearInterval(hs.pollInterval); hs.pollInterval = null; }
+    if (btn) { btn.disabled = false; btn.textContent = '▶ EXECUTE MISSION'; }
+    if (counter) counter.textContent = `✓ Mission complete — ${hs.chain.length} step(s)`;
+    log('⬡ HexStrike mission complete! View full report in REPORTS tab.', 'success');
+    switchTab('reports');
+}
+
+async function _pollHexstrikeProcesses() {
+    const container = document.getElementById('hs-processes-list');
+    if (!container) return;
+
+    const res = await api('/api/hexstrike/processes');
+    const procs = res.processes || res.active_processes || [];
+
+    if (!procs.length) {
+        container.innerHTML = '<div style="font-size:0.75rem; color:var(--text-dim); padding:8px 0">No active processes.</div>';
+        return;
+    }
+
+    container.innerHTML = procs.map(p => {
+        const pct = Math.min(100, Math.max(0, p.progress || p.percent || 0));
+        const elapsed = p.elapsed || p.elapsed_time || '';
+        return `
+            <div class="process-row">
+                <span class="process-name">${escHtml(p.tool || p.name || 'unknown')}</span>
+                <div class="process-bar-wrap">
+                    <div class="process-bar-fill" style="width:${pct}%"></div>
+                </div>
+                <span class="process-elapsed">${escHtml(String(elapsed))}</span>
+            </div>
+        `;
+    }).join('');
 }
 
 // --- Logging & UI Helpers ---
@@ -517,22 +772,60 @@ async function loadReports() {
 
     container.innerHTML = '';
     res.reports.forEach(r => {
-        const tr = document.createElement('tr');
-        const logBtn = r.log_file ? `<button class="btn" style="padding:2px 8px; font-size:0.6rem" onclick="viewFullLog('${r.log_file}', '${r.type} @ ${r.target}')">VIEW OUTPUT</button>` : '<span style="color:var(--text-dim)">N/A</span>';
-        const aiBtn = r.log_file
-            ? `<button class="btn" style="padding:2px 8px; font-size:0.6rem; border-color:var(--secondary); color:var(--secondary)" onclick="openAiModal('${r.id}', '${r.log_file}', '${r.type} @ ${r.target}')">AI</button>`
-            : '<span style="color:var(--text-dim)">—</span>';
+        const isHexstrike = r.type === 'HEXSTRIKE MISSION';
 
+        // Type cell: add ⬡ badge for HexStrike missions
+        const typeBadge = isHexstrike
+            ? ` <span class="hs-chain-badge">\u2b21 AI</span>` : '';
+
+        // Chain tools pill list
+        const chainHtml = isHexstrike && r.hexstrike_chain && r.hexstrike_chain.length
+            ? `<div style="margin-top:4px; display:flex; flex-wrap:wrap; gap:4px">${r.hexstrike_chain.map(t => `<span class="tag">${escHtml(t)}</span>`).join('')}</div>` : '';
+
+        const logBtn = r.log_file
+            ? `<button class="btn" style="padding:2px 8px; font-size:0.6rem" onclick="viewFullLog('${escHtml(r.log_file)}', '${escHtml(r.type)} @ ${escHtml(r.target)}')">VIEW OUTPUT</button>`
+            : '<span style="color:var(--text-dim)">N/A</span>';
+
+        // AI button: HexStrike reports show auto-inline analysis; others use the modal
+        let aiCell;
+        if (isHexstrike && r.ai_analysis) {
+            aiCell = `<button class="btn" style="padding:2px 8px; font-size:0.6rem; border-color:var(--accent); color:var(--accent)"
+                onclick="toggleHsAnalysis('hs-ai-${escHtml(r.id)}')">AI REPORT</button>`;
+        } else if (!isHexstrike && r.log_file) {
+            aiCell = `<button class="btn" style="padding:2px 8px; font-size:0.6rem; border-color:var(--secondary); color:var(--secondary)"
+                onclick="openAiModal('${escHtml(r.id)}', '${escHtml(r.log_file)}', '${escHtml(r.type)} @ ${escHtml(r.target)}')">AI</button>`;
+        } else {
+            aiCell = '<span style="color:var(--text-dim)">—</span>';
+        }
+
+        // Build AI analysis expandable row
+        const aiRow = isHexstrike && r.ai_analysis
+            ? `<tr id="hs-ai-${escHtml(r.id)}" style="display:none">
+                <td colspan="6" style="padding:0 10px 12px">
+                    <div class="ai-analysis-block">${escHtml(r.ai_analysis)}</div>
+                </td>
+              </tr>` : '';
+
+        const tr = document.createElement('template');
         tr.innerHTML = `
-            <td style="padding:10px">${r.timestamp.split('T')[1].split('.')[0]}</td>
-            <td style="color:var(--primary)">${r.type}</td>
-            <td>${r.target}</td>
-            <td class="${r.status.toLowerCase()}">${r.status}</td>
-            <td>${logBtn}</td>
-            <td>${aiBtn}</td>
-        `;
-        container.appendChild(tr);
+            <tr>
+                <td style="padding:10px">${escHtml(r.timestamp.split('T')[1].split('.')[0])}</td>
+                <td style="color:var(--primary)">${escHtml(r.type)}${typeBadge}${chainHtml}</td>
+                <td>${escHtml(r.target)}</td>
+                <td class="${r.status.toLowerCase()}">${escHtml(r.status)}</td>
+                <td>${logBtn}</td>
+                <td>${aiCell}</td>
+            </tr>
+            ${aiRow}
+        `.trim();
+        container.appendChild(tr.content);
     });
+}
+
+function toggleHsAnalysis(rowId) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.style.display = row.style.display === 'none' ? '' : 'none';
 }
 
 async function viewFullLog(filename, title) {

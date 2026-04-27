@@ -44,9 +44,9 @@
                 <span class="material-icons">gps_fixed</span>
                 <span class="nav-label">WIFI ATTACKS</span>
             </button>
-            <button class="nav-btn" data-tab="scenarios">
-                <span class="material-icons">auto_awesome</span>
-                <span class="nav-label">AUTOMATED</span>
+            <button class="nav-btn" data-tab="hexstrike">
+                <span class="material-icons">hub</span>
+                <span class="nav-label">HEXSTRIKE</span>
             </button>
             <button class="nav-btn" data-tab="reports">
                 <span class="material-icons">article</span>
@@ -159,15 +159,11 @@
                             <div class="panel-header">
                                 <h2>MITM &amp; Credential Intercept</h2>
                             </div>
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px">
                                 <button class="btn" style="border-color:#ff4444; color:#ff4444"
                                     onclick="runAction('bettercap')">BETTERCAP MITM</button>
-                                <button class="btn" style="border-color:#ff4444; color:#ff4444"
-                                    onclick="runAction('sslstrip')">SSL STRIP</button>
                                 <button class="btn" style="border-color:#ff8800; color:#ff8800"
                                     onclick="openDnsSpoofModal()">DNS SPOOF</button>
-                                <button class="btn" style="border-color:#ff8800; color:#ff8800"
-                                    onclick="runAction('karma')">KARMA AP</button>
                             </div>
                         </div>
 
@@ -175,12 +171,15 @@
                             <div class="panel-header">
                                 <h2>Enterprise &amp; Forensics</h2>
                             </div>
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                                <button class="btn" style="border-color:var(--secondary); color:var(--secondary)"
-                                    onclick="runAction('eaphammer')">WPA ENTERPRISE</button>
-                                <button class="btn secondary"
-                                    onclick="runAction('pcredz')">ANALYZE CAPTURES</button>
-                            </div>
+                            <details class="advanced-optional">
+                                <summary>⚠ Advanced Tools — Requires manual install at /opt/</summary>
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px">
+                                    <button class="btn" style="border-color:var(--secondary); color:var(--secondary)"
+                                        onclick="runAction('eaphammer')">WPA ENTERPRISE</button>
+                                    <button class="btn secondary"
+                                        onclick="runAction('pcredz')">ANALYZE CAPTURES</button>
+                                </div>
+                            </details>
                         </div>
 
                         <div class="panel">
@@ -202,43 +201,72 @@
                         </div>
                     </div>
 
-                    <!-- TAB 4: SCENARIOS -->
-                    <div id="tab-scenarios" class="tab-content">
-                        <div class="scenario-grid">
-                            <div class="scenario-card" onclick="runScenario('wifi_audit')">
-                                <span class="material-icons scenario-icon" style="color:var(--primary)">security</span>
-                                <div class="scenario-title">WiFi Audit</div>
-                                <div class="scenario-desc">Scan, Capture, and Test WPS security on all nearby networks.
+                    <!-- TAB 4: HEXSTRIKE AI -->
+                    <div id="tab-hexstrike" class="tab-content">
+
+                        <!-- Engine Status Bar -->
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h2>⬡ HexStrike AI Engine</h2>
+                                <div style="display:flex; gap:8px; align-items:center">
+                                    <div id="hs-badge" class="hexstrike-badge offline">● OFFLINE</div>
+                                    <button class="btn" style="font-size:0.6rem" onclick="hexstrikeStartServer()">START ENGINE</button>
+                                    <button class="btn secondary" style="font-size:0.6rem" onclick="hexstrikeStopServer()">STOP</button>
+                                    <button class="btn" style="font-size:0.6rem; border-color:var(--text-dim); color:var(--text-dim)" onclick="hexstrikeStatus()">↻ REFRESH</button>
                                 </div>
                             </div>
-                            <div class="scenario-card" onclick="runScenario('network_sweep')">
-                                <span class="material-icons scenario-icon"
-                                    style="color:var(--secondary)">searching</span>
-                                <div class="scenario-title">Net Sweep</div>
-                                <div class="scenario-desc">Full discovery of all hosts, open ports, and active services.
-                                </div>
-                            </div>
-                            <div class="scenario-card" onclick="runScenario('web_hunt')">
-                                <span class="material-icons scenario-icon" style="color:var(--accent)">language</span>
-                                <div class="scenario-title">Web Hunt</div>
-                                <div class="scenario-desc">Automatically find and enumerate every web server on the
-                                    network.
-                                </div>
-                            </div>
-                            <div class="scenario-card" onclick="runScenario('stealth_recon')">
-                                <span class="material-icons scenario-icon"
-                                    style="color:var(--primary)">visibility_off</span>
-                                <div class="scenario-title">Stealth</div>
-                                <div class="scenario-desc">Quiet SYN scanning with decoys to avoid IDA/IPS detection.
-                                </div>
-                            </div>
-                            <div class="scenario-card" onclick="runScenario('quick_check')">
-                                <span class="material-icons scenario-icon" style="color:var(--text)">speed</span>
-                                <div class="scenario-title">Quick Check</div>
-                                <div class="scenario-desc">Fast 5-minute assessment of critical network vulnerabilities.
-                                </div>
+                            <div style="font-size:0.72rem; color:var(--text-dim); line-height:1.6">
+                                <strong style="color:var(--primary)">IntelligentDecisionEngine</strong> — profiles your target, selects optimal tools, builds an attack chain, and auto-recovers on failures.
+                                Gemini analyzes all outputs and writes a professional report.
                             </div>
                         </div>
+
+                        <!-- Mission Setup -->
+                        <div class="panel">
+                            <div class="panel-header"><h2>Mission Setup</h2></div>
+                            <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap">
+                                <input id="hs-target" type="text" placeholder="Target: IP, CIDR, or hostname (e.g. 192.168.1.1)"
+                                    onclick="showKeyboard('hs-target')"
+                                    class="target-input"
+                                    style="flex:1; min-width:200px; margin-bottom:0;"
+                                />
+                                <select id="hs-objective"
+                                    style="background:var(--bg); color:var(--text); border:1px solid var(--border); padding:10px; border-radius:4px; font-family:var(--font-mono); font-size:0.8rem">
+                                    <option value="comprehensive">Comprehensive</option>
+                                    <option value="quick">Quick</option>
+                                    <option value="stealth">Stealth</option>
+                                </select>
+                                <button class="btn" style="padding:10px 16px" id="hs-analyze-btn" onclick="hexstrikeAnalyze()">⬡ ANALYZE TARGET</button>
+                            </div>
+                        </div>
+
+                        <!-- Intelligence Report -->
+                        <div class="panel" id="hs-intel-panel" style="display:none">
+                            <div class="panel-header"><h2>Intelligence Report</h2></div>
+                            <div id="hs-intel-content" class="hexstrike-intel"></div>
+                        </div>
+
+                        <!-- Attack Chain -->
+                        <div class="panel" id="hs-chain-panel" style="display:none">
+                            <div class="panel-header">
+                                <h2>Attack Chain</h2>
+                                <button class="btn" id="hs-execute-btn" onclick="hexstrikeExecuteChain()"
+                                    style="background:rgba(57,255,20,0.12); border-color:var(--accent); color:var(--accent); padding:8px 18px">
+                                    ▶ EXECUTE MISSION
+                                </button>
+                            </div>
+                            <div id="hs-chain-list" class="attack-chain"></div>
+                        </div>
+
+                        <!-- Active Processes -->
+                        <div class="panel" id="hs-processes-panel" style="display:none">
+                            <div class="panel-header">
+                                <h2>Active Processes</h2>
+                                <div id="hs-step-counter" style="font-size:0.7rem; color:var(--text-dim)"></div>
+                            </div>
+                            <div id="hs-processes-list"></div>
+                        </div>
+
                     </div>
 
                     <!-- TAB 5: REPORTS -->

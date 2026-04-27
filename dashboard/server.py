@@ -7,6 +7,7 @@ Simple Flask server to provide API endpoints for the dashboard
 
 from flask import Flask, jsonify, send_from_directory, request
 import subprocess
+import shlex
 import os
 import glob
 import json
@@ -503,7 +504,7 @@ def scan_devices():
         if not target_subnet:
             if interface:
                 # Get IP of interface
-                ip_cmd = r"ip -4 addr show " + interface + r" | grep -oP '(?<=inet\s)\d+(\.\d+){3}'"
+                ip_cmd = "ip -4 addr show " + shlex.quote(interface) + r" | grep -oP '(?<=inet\s)\d+(\.\d+){3}'"
                 ip_res = subprocess.run(ip_cmd, shell=True, capture_output=True, text=True)
                 local_ip = ip_res.stdout.strip()
                 if not local_ip:
@@ -838,6 +839,9 @@ def action_monitor_off():
 @app.route('/api/action/evil_twin', methods=['POST'])
 def action_evil_twin():
     """Start Evil Twin attack on current target"""
+    for tool in ('hostapd', 'dnsmasq', 'iptables', 'python3'):
+        if not check_tool(tool):
+            return jsonify({'error': f'{tool} is not installed. Run: sudo apt install {tool}'}), 400
     if not CURRENT_TARGET:
         return jsonify({'status': 'error', 'message': 'No target selected!'}), 400
         
@@ -877,7 +881,7 @@ def action_display_deauth():
     
     try:
         log_file = gen_log_name(f"deauth_{ssid}")
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --deauth {bssid} 0 {channel}"
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --deauth {shlex.quote(str(bssid))} 0 {shlex.quote(str(channel))}"
         
         report = reporter.add_report(
             "WIFI (DEAUTH)", 
@@ -944,7 +948,7 @@ def action_handshake():
     
     try:
         log_file = gen_log_name(f"handshake_{ssid}")
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --handshake {bssid} {channel} \"{ssid}\""
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --handshake {shlex.quote(str(bssid))} {shlex.quote(str(channel))} {shlex.quote(str(ssid))}"
         
         report = reporter.add_report(
             "WIFI (HANDSHAKE)", 
@@ -1033,7 +1037,6 @@ def action_recon():
     try:
         log_file = gen_log_name(f"recon_{mode}")
         flag = f"--{mode}"
-        flag = f"--{mode}"
         cmd = f"sudo {VOIDPWN_DIR}/scripts/network/recon.sh {flag} \"{target}\""
         
         report = reporter.add_report(
@@ -1056,6 +1059,10 @@ def action_pmkid():
         return jsonify({'error': 'hcxdumptool not installed. Run: sudo apt install hcxdumptool'}), 400
     data = request.get_json() or {}
     duration = data.get('duration', 300)
+    try:
+        duration = int(duration)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'duration must be an integer (seconds)'}), 400
 
     log_file = gen_log_name("pmkid")
     try:
@@ -1066,7 +1073,7 @@ def action_pmkid():
             f"Capture running for {duration}s",
             log_file=log_file
         )
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pmkid {duration}"
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pmkid {shlex.quote(str(duration))}"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'PMKID capture started ({duration}s)...'})
     except Exception as e:
@@ -1089,7 +1096,13 @@ def action_beacon():
             "MDK4 Beacon Flooding active",
             log_file=log_file
         )
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon {ssid_file}"
+        if ssid_file:
+            ssid_file_abs = os.path.realpath(ssid_file)
+            if not ssid_file_abs.startswith(VOIDPWN_DIR):
+                return jsonify({'error': 'Invalid ssid_file path'}), 400
+            cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon {shlex.quote(ssid_file_abs)}"
+        else:
+            cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': 'Beacon flood started...'})
     except Exception as e:
@@ -1112,7 +1125,7 @@ def action_auth_flood():
             "MDK4 Authentication Flooding active",
             log_file=log_file
         )
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auth {target}"
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auth \"{target}\""
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'Auth flood against {target or "ALL"} started...'})
     except Exception as e:
@@ -1138,7 +1151,7 @@ def action_pixie():
             "WPS Pixie-Dust attack initiated",
             log_file=log_file
         )
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pixie {target}"
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pixie \"{target}\""
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'Pixie-Dust attack launched on {target}...'})
     except Exception as e:
@@ -1166,38 +1179,11 @@ def action_bettercap():
                             "ARP poison + credential sniff active", log_file=log_file)
         cmd = f"sudo {MITM_TOOLS_SCRIPT} --bettercap"
         if interface:
-            cmd += f" --interface {interface}"
+            cmd += f" --interface {shlex.quote(interface)}"
         if target:
-            cmd += f" --target {target}"
+            cmd += f" --target {shlex.quote(target)}"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': 'Bettercap MITM started...'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/action/sslstrip', methods=['POST'])
-def action_sslstrip():
-    """Bettercap SSL strip via http.proxy / hstshijack"""
-    if not check_tool('bettercap'):
-        return jsonify({'error': 'bettercap not installed. Run: sudo apt install bettercap'}), 400
-    data = request.get_json() or {}
-    target = data.get('target', '')
-    interface = data.get('interface', '')
-
-    if target and not re.match(r'^[0-9]{1,3}(?:\.[0-9]{1,3}){3}$', target):
-        return jsonify({'error': 'Invalid target IP'}), 400
-
-    log_file = gen_log_name("sslstrip")
-    try:
-        report = reporter.add_report("MITM (SSL-STRIP)", target or "SUBNET", "Running",
-                            "HTTP proxy + SSL downgrade active", log_file=log_file)
-        cmd = f"sudo {MITM_TOOLS_SCRIPT} --sslstrip"
-        if interface:
-            cmd += f" --interface {interface}"
-        if target:
-            cmd += f" --target {target}"
-        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
-        return jsonify({'status': 'success', 'message': 'SSL Strip started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1231,27 +1217,6 @@ def action_dnsspoof():
             cmd += f" --interface {interface}"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'DNS Spoof started: {domain} → {redirect_ip}'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/action/karma', methods=['POST'])
-def action_karma():
-    """KARMA rogue AP — responds to all SSID probes"""
-    if not check_tool('bettercap'):
-        return jsonify({'error': 'bettercap not installed. Run: sudo apt install bettercap'}), 400
-    data = request.get_json() or {}
-    interface = data.get('interface', '')
-
-    log_file = gen_log_name("karma")
-    try:
-        report = reporter.add_report("WIFI (KARMA)", interface or "AUTO", "Running",
-                            "KARMA rogue AP active — responding to all probes", log_file=log_file)
-        cmd = f"sudo {MITM_TOOLS_SCRIPT} --karma"
-        if interface:
-            cmd += f" --interface {interface}"
-        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
-        return jsonify({'status': 'success', 'message': 'KARMA AP started...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1314,54 +1279,12 @@ def action_pcredz():
         return jsonify({'error': str(e)}), 500
 
 
-# --- Automated Scenario Endpoints ---
-def run_scenario(name, cmd):
-    """Helper to run a scenario and log it"""
-    log_file = gen_log_name(name)
-    try:
-        report = reporter.add_report(f"SCENARIO ({name.upper()})", name, "Started", f"Launched scenario: {name}", log_file=log_file)
-        run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
-        add_live_log(f"SCENARIO STARTED: {name}", "success")
-        return jsonify({'status': 'success', 'message': f'Scenario {name} started in background'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/scenario/wifi_audit', methods=['POST'])
-def scenario_wifi_audit():
-    cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --scan"
-    return run_scenario("WiFi Audit", cmd)
-
-@app.route('/api/scenario/network_sweep', methods=['POST'])
-def scenario_network_sweep():
-    cmd = f"sudo {VOIDPWN_DIR}/scripts/network/recon.sh --discover"
-    return run_scenario("Network Sweep", cmd)
-
-@app.route('/api/scenario/web_hunt', methods=['POST'])
-def scenario_web_hunt():
-    data = request.get_json() or {}
-    target = data.get('target')
-    if not target: return jsonify({'error': 'Target required'}), 400
-    cmd = f"sudo {VOIDPWN_DIR}/scripts/network/recon.sh --web {target}"
-    return run_scenario("Web Hunt", cmd)
-
-@app.route('/api/scenario/stealth_recon', methods=['POST'])
-def scenario_stealth_recon():
-    data = request.get_json() or {}
-    target = data.get('target')
-    if not target: return jsonify({'error': 'Target required'}), 400
-    cmd = f"sudo {VOIDPWN_DIR}/scripts/network/recon.sh --stealth {target}"
-    return run_scenario("Stealth Recon", cmd)
-
-@app.route('/api/scenario/quick_check', methods=['POST'])
-def scenario_quick_check():
-    data = request.get_json() or {}
-    target = data.get('target')
-    if not target: return jsonify({'error': 'Target required'}), 400
-    cmd = f"sudo {VOIDPWN_DIR}/scripts/network/recon.sh --quick {target}"
-    return run_scenario("Quick Check", cmd)
-
 @app.route('/api/action/throttle', methods=['POST'])
 def action_throttle():
+    if not check_tool('tc'):
+        return jsonify({'error': 'tc not installed. Run: sudo apt install iproute2'}), 400
+    if not check_tool('arpspoof'):
+        return jsonify({'error': 'arpspoof not installed. Run: sudo apt install dsniff'}), 400
     data = request.get_json() or {}
     target = data.get('target')
     speed = data.get('speed', '1mbit')
@@ -1369,7 +1292,7 @@ def action_throttle():
     
     log_file = gen_log_name("throttle")
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_throttle.sh {target} {speed}"
+        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_throttle.sh {shlex.quote(str(target))} {shlex.quote(str(speed))}"
         run_proc_and_capture(cmd, log_file=log_file)
         reporter.add_report("NETWORK (THROTTLE)", target, "Running", f"Limiting to {speed}", log_file=log_file)
         return jsonify({'status': 'success', 'message': f'Throttling {target} to {speed}'})
@@ -1685,6 +1608,327 @@ Write the full professional security report now, covering each requested section
         if 'Name or service not known' in err_str or 'Temporary failure' in err_str or 'Errno -3' in err_str or 'urlopen error' in err_str:
             return jsonify({'error': 'No internet connection. AI Analysis requires internet access to reach the LLM API. Connect the Pi to the internet and try again.'}), 502
         return jsonify({'error': f'LLM request failed: {err_str}'}), 502
+
+
+# ============================================================
+# HexStrike AI Bridge
+# ============================================================
+HEXSTRIKE_URL = os.environ.get('HEXSTRIKE_URL', 'http://127.0.0.1:8888')
+HEXSTRIKE_SCRIPT = os.path.join(VOIDPWN_DIR, 'hexstrike-ai', 'hexstrike_server.py')
+TOOL_PROFILE_PATH = os.path.join(VOIDPWN_DIR, 'hexstrike-ai', 'voidpwn_tool_profile.json')
+_hexstrike_proc = None  # subprocess.Popen handle
+
+
+def load_tool_profile():
+    """Load the VoidPWN tool whitelist profile."""
+    try:
+        with open(TOOL_PROFILE_PATH, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return {"available_tools": ["nmap", "gobuster", "nikto", "sqlmap", "hydra", "john", "hashcat", "bettercap", "wifite"]}
+
+
+def hexstrike_get(path, timeout=5):
+    """Proxy a GET to HexStrike server."""
+    req = urllib.request.Request(f"{HEXSTRIKE_URL}{path}")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
+def hexstrike_post(path, body, timeout=30):
+    """Proxy a POST to HexStrike server."""
+    payload = json.dumps(body).encode('utf-8')
+    req = urllib.request.Request(
+        f"{HEXSTRIKE_URL}{path}",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
+@app.route('/api/hexstrike/status')
+def hexstrike_status():
+    """Check if HexStrike server is running."""
+    try:
+        data = hexstrike_get('/health', timeout=3)
+        tool_count = len(data.get('tools', data.get('available_tools', [])))
+        return jsonify({'online': True, 'tool_count': tool_count, 'version': data.get('version', 'unknown')})
+    except Exception:
+        return jsonify({'online': False, 'tool_count': 0, 'version': 'N/A'})
+
+
+@app.route('/api/hexstrike/start', methods=['POST'])
+def hexstrike_start():
+    """Start the HexStrike server subprocess."""
+    global _hexstrike_proc
+    if _hexstrike_proc and _hexstrike_proc.poll() is None:
+        return jsonify({'status': 'already_running'})
+    if not os.path.isfile(HEXSTRIKE_SCRIPT):
+        return jsonify({'error': f'hexstrike_server.py not found at {HEXSTRIKE_SCRIPT}'}), 404
+    try:
+        # Capture stderr so import/startup errors surface in the dashboard log
+        _hexstrike_proc = subprocess.Popen(
+            ['python3', HEXSTRIKE_SCRIPT],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE
+        )
+        # Give it 3 seconds — if it crashes immediately we capture why
+        import threading
+        def _log_stderr(proc):
+            try:
+                err = proc.stderr.read(4096).decode('utf-8', errors='replace').strip()
+                if err:
+                    add_live_log(f'⬡ HexStrike stderr: {err[:500]}', 'error')
+            except Exception:
+                pass
+        threading.Thread(target=_log_stderr, args=(_hexstrike_proc,), daemon=True).start()
+        add_live_log('⬡ HexStrike AI Engine starting (PID {})...'.format(_hexstrike_proc.pid), 'info')
+        return jsonify({'status': 'started', 'pid': _hexstrike_proc.pid})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hexstrike/stop', methods=['POST'])
+def hexstrike_stop():
+    """Stop the HexStrike server subprocess."""
+    global _hexstrike_proc
+    if _hexstrike_proc and _hexstrike_proc.poll() is None:
+        _hexstrike_proc.terminate()
+        _hexstrike_proc = None
+        add_live_log('⬡ HexStrike AI Engine stopped.', 'info')
+        return jsonify({'status': 'stopped'})
+    return jsonify({'status': 'not_running'})
+
+
+@app.route('/api/hexstrike/analyze', methods=['POST'])
+def hexstrike_analyze():
+    """
+    Ask HexStrike DecisionEngine to profile the target and build an attack chain.
+    Constrains tool selection to VoidPWN's installed toolset via the profile whitelist.
+    """
+    data = request.get_json() or {}
+    target = data.get('target', '').strip()
+    objective = data.get('objective', 'comprehensive').strip()
+
+    if not target:
+        return jsonify({'error': 'Target is required'}), 400
+
+    # Validate target — IP, CIDR, hostname
+    if not re.match(r'^[a-zA-Z0-9.\-/:_]+$', target) or len(target) > 253:
+        return jsonify({'error': 'Invalid target format'}), 400
+
+    allowed_objectives = {'comprehensive', 'quick', 'stealth'}
+    if objective not in allowed_objectives:
+        return jsonify({'error': 'Invalid objective'}), 400
+
+    tool_profile = load_tool_profile()
+    allowed = set(tool_profile.get('available_tools', []))
+    fallback_map = tool_profile.get('fallback_map', {})
+
+    try:
+        # Single call to the real DecisionEngine endpoint — returns target profile +
+        # full AttackChain with per-tool optimized parameters from optimize_parameters()
+        hs_response = hexstrike_post('/api/intelligence/create-attack-chain', {
+            'target': target,
+            'objective': objective
+        }, timeout=60)
+    except Exception as e:
+        return jsonify({'error': f'HexStrike offline or unreachable: {str(e)}. Start the engine first.'}), 503
+
+    if not hs_response.get('success'):
+        return jsonify({'error': hs_response.get('error', 'DecisionEngine returned no result')}), 502
+
+    raw_profile = hs_response.get('target_profile', {})
+    attack_chain = hs_response.get('attack_chain', {})
+    raw_steps = attack_chain.get('steps', [])
+
+    # Filter attack chain to tools installed on this device (whitelist enforcement)
+    chain = []
+    seen = set()
+    for step in raw_steps:
+        tool_name = step.get('tool', '')
+        params = step.get('parameters', {})
+        # Substitute excluded/unavailable tools via fallback map
+        if tool_name not in allowed:
+            tool_name = fallback_map.get(tool_name, '')
+        if not tool_name or tool_name not in allowed or tool_name in seen:
+            continue
+        seen.add(tool_name)
+        fallback_tool = fallback_map.get(tool_name, '')
+        chain.append({
+            'tool': tool_name,
+            'parameters': params,          # real per-tool optimized params from DecisionEngine
+            'description': step.get('expected_outcome', f'Run {tool_name} against {target}'),
+            'estimated_time': step.get('execution_time_estimate', 'varies'),
+            'success_probability': step.get('success_probability', 0),
+            'fallback': fallback_tool if fallback_tool != tool_name else ''
+        })
+
+    return jsonify({
+        'target_profile': {
+            'target': raw_profile.get('target', target),
+            'type': raw_profile.get('target_type', 'unknown'),
+            'risk_level': raw_profile.get('risk_level', 'unknown'),
+            'attack_surface_score': raw_profile.get('attack_surface_score', 'N/A'),
+            'confidence': raw_profile.get('confidence_score', 'N/A'),
+            'technologies': raw_profile.get('technologies', [])
+        },
+        'chain': chain,
+        'objective': objective,
+        'success_probability': attack_chain.get('success_probability', 0),
+        'estimated_time': attack_chain.get('estimated_time', 0)
+    })
+
+
+@app.route('/api/hexstrike/execute', methods=['POST'])
+def hexstrike_execute():
+    """
+    Execute a single tool step from a HexStrike attack chain.
+    Streams output to LIVE_LOGS, appends to a mission log file, and
+    after the last step calls Gemini to write an AI analysis report.
+    """
+    data = request.get_json() or {}
+    target = data.get('target', '').strip()
+    tool = data.get('tool', '').strip()
+    objective = data.get('objective', 'comprehensive')
+    step_index = data.get('step_index', 0)
+    total_steps = data.get('total_steps', 1)
+    mission_id = data.get('mission_id', str(uuid.uuid4()))
+    log_file = data.get('log_file', gen_log_name(f'hexstrike_mission'))
+    # Optimized parameters supplied by DecisionEngine.optimize_parameters() at analyze time
+    step_params = data.get('step_params', {})
+
+    if not target or not tool:
+        return jsonify({'error': 'target and tool are required'}), 400
+
+    # Validate tool against whitelist
+    profile = load_tool_profile()
+    allowed = set(profile.get('available_tools', []))
+    if tool not in allowed:
+        return jsonify({'error': f'Tool "{tool}" is not in VoidPWN tool whitelist'}), 400
+
+    if not re.match(r'^[a-zA-Z0-9.\-/:_]+$', target) or len(target) > 253:
+        return jsonify({'error': 'Invalid target format'}), 400
+
+    add_live_log(f'⬡ HexStrike [{step_index+1}/{total_steps}] executing: {tool} → {target}', 'info')
+
+    # Build payload: start with DecisionEngine's optimized params, then ensure target
+    # is set under the right field name (nmap/nikto use 'target', gobuster/sqlmap use 'url').
+    def _build_tool_payload(t, params, tgt):
+        payload = {k: v for k, v in params.items() if v is not None}
+        if 'url' in payload:
+            payload['url'] = tgt
+        else:
+            payload['target'] = tgt
+        return payload
+
+    tool_payload = _build_tool_payload(tool, step_params, target)
+
+    try:
+        result = hexstrike_post(f'/api/tools/{tool}', tool_payload, timeout=300)
+        output = result.get('output', result.get('result', json.dumps(result)))
+    except Exception as e:
+        # Try fallback tool — use minimal safe payload
+        fallback = profile.get('fallback_map', {}).get(tool)
+        if fallback and fallback in allowed:
+            add_live_log(f'⚡ Auto-recovery: {tool} failed, switching to fallback [{fallback}]', 'info')
+            try:
+                fb_payload = _build_tool_payload(fallback, step_params, target)
+                result = hexstrike_post(f'/api/tools/{fallback}', fb_payload, timeout=300)
+                output = result.get('output', result.get('result', json.dumps(result)))
+                tool = fallback  # record actual tool used
+            except Exception as e2:
+                output = f'[ERROR] {tool} and fallback {fallback} both failed: {str(e2)}'
+        else:
+            output = f'[ERROR] {tool} failed: {str(e)}'
+
+    add_live_log(f'⬡ {tool.upper()} step complete', 'success')
+
+    # Write step output to mission log
+    log_path = os.path.join(LOGS_DIR, os.path.basename(log_file))
+    try:
+        with open(log_path, 'a') as lf:
+            lf.write(f'\n\n=== STEP {step_index+1}: {tool.upper()} ===\n')
+            lf.write(str(output))
+    except Exception:
+        pass
+
+    # On last step: generate Gemini AI summary and save full report
+    ai_analysis = None
+    if step_index + 1 >= total_steps:
+        try:
+            full_log = ''
+            if os.path.exists(log_path):
+                with open(log_path, 'r', errors='replace') as lf:
+                    full_log = lf.read()
+
+            cfg = load_config()
+            api_key = cfg.get('api_key', '').strip()
+            provider = cfg.get('provider', 'gemini')
+
+            if api_key and check_internet():
+                structured = summarize_log(full_log) if full_log else f'Target: {target}, Objective: {objective}'
+                prompt = (
+                    f"You are a senior penetration tester reviewing a VoidPWN AI-driven security assessment.\n"
+                    f"Target: {target}\nObjective: {objective}\n\n"
+                    f"Tool outputs (structured summary):\n{structured}\n\n"
+                    f"Provide a professional security report with:\n"
+                    f"1. Executive Summary\n"
+                    f"2. Key Findings with severity (Critical/High/Medium/Low)\n"
+                    f"3. CVE references where applicable\n"
+                    f"4. Recommended next steps\n\n"
+                    f"Be specific and actionable. Use markdown formatting."
+                )
+                if provider == 'gemini':
+                    ai_analysis = call_gemini(api_key, prompt)
+                elif provider == 'groq':
+                    ai_analysis = call_groq(api_key, prompt)
+                elif provider == 'openai':
+                    ai_analysis = call_openai(api_key, prompt)
+                add_live_log('⬡ HexStrike AI analysis complete — report saved.', 'success')
+        except Exception as e:
+            ai_analysis = None
+            add_live_log(f'⬡ AI analysis skipped: {str(e)}', 'info')
+
+        # Save full mission report entry
+        chain_tools = data.get('chain_tools', [tool])
+        report_entry = {
+            'id': mission_id,
+            'timestamp': datetime.now().isoformat(),
+            'type': 'HEXSTRIKE MISSION',
+            'target': target,
+            'objective': objective,
+            'status': 'Completed',
+            'details': f'AI-driven {objective} assessment — {len(chain_tools)} tool(s)',
+            'hexstrike_chain': chain_tools,
+            'tools_executed': total_steps,
+            'log_file': os.path.basename(log_file),
+            'ai_analysis': ai_analysis
+        }
+        reporter.reports.insert(0, report_entry)
+        reporter._save()
+
+    return jsonify({
+        'status': 'success',
+        'tool': tool,
+        'step': step_index + 1,
+        'output_preview': str(output)[:500],
+        'log_file': os.path.basename(log_file),
+        'mission_id': mission_id,
+        'ai_analysis': ai_analysis
+    })
+
+
+@app.route('/api/hexstrike/processes')
+def hexstrike_processes():
+    """Proxy active process list from HexStrike."""
+    try:
+        data = hexstrike_get('/api/processes/dashboard', timeout=5)
+        return jsonify(data)
+    except Exception:
+        return jsonify({'processes': [], 'error': 'HexStrike offline'})
 
 
 if __name__ == '__main__':
