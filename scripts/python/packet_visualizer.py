@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import sys
+import os
 import time
 import random
 import curses
+import argparse
 from datetime import datetime
 try:
     from scapy.all import sniff, IP, TCP, UDP, ICMP
@@ -11,8 +13,8 @@ except ImportError:
     print("Scapy not found. Run: sudo apt install python3-scapy")
     sys.exit(1)
 
-# Configuration
-INTERFACE = "wlan0"  # Default, can be changed
+# Configuration (overridden by --interface argument)
+INTERFACE = "wlan0"
 MAX_LINES = 20
 
 class PacketMatrix:
@@ -102,31 +104,50 @@ def packet_callback(packet):
     matrix.process_packet(packet)
 
 def main():
-    global matrix
-    
+    global matrix, INTERFACE
+
+    parser = argparse.ArgumentParser(description='VoidPWN Packet Visualizer')
+    parser.add_argument('-i', '--interface', default=None,
+                        help='Network interface to sniff on (default: auto-detect)')
+    args = parser.parse_args()
+
     if os.geteuid() != 0:
-        print("Root required for sniffing.")
+        print("Root required for sniffing. Run with sudo.")
         sys.exit(1)
-        
+
+    # Auto-detect interface if not specified
+    if args.interface:
+        INTERFACE = args.interface
+    else:
+        # Try to detect a wireless interface
+        try:
+            import subprocess
+            out = subprocess.check_output(['iw', 'dev'], stderr=subprocess.DEVNULL).decode()
+            for line in out.splitlines():
+                if 'Interface' in line:
+                    INTERFACE = line.split()[-1]
+                    break
+        except Exception:
+            pass  # Keep default wlan0
+
     try:
         matrix = PacketMatrix()
         # Filter out SSH traffic to avoid loop (port 22)
-        sniff(filter="not port 22", prn=packet_callback, store=0)
+        sniff(iface=INTERFACE, filter="not port 22", prn=packet_callback, store=0)
     except KeyboardInterrupt:
         pass
     except Exception as e:
         # If curses fails, ensure we restore terminal
         try:
             matrix.stop()
-        except:
+        except Exception:
             pass
         print(f"Error: {e}")
     finally:
         try:
             matrix.stop()
-        except:
+        except Exception:
             pass
 
 if __name__ == "__main__":
-    import os
     main()

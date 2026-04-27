@@ -39,6 +39,16 @@ log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1"; }
 
+# Verify a binary exists; print an install hint and exit if missing
+check_tool() {
+    local tool="$1"
+    local pkg="${2:-$1}"
+    if ! command -v "$tool" &>/dev/null; then
+        log_error "$tool not found. Install with: sudo apt install $pkg"
+        exit 1
+    fi
+}
+
 # Check if running as root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -58,6 +68,7 @@ quick_scan() {
     
     local output="$OUTPUT_DIR/quick_scan_${TIMESTAMP}.txt"
     
+    check_tool nmap
     log_info "Quick scan of $target"
     log_info "Output: $output"
     echo ""
@@ -79,6 +90,7 @@ full_scan() {
     
     local output="$OUTPUT_DIR/full_scan_${TIMESTAMP}"
     
+    check_tool nmap
     log_info "Full port scan of $target"
     log_info "This may take a while..."
     log_info "Output: $output"
@@ -101,6 +113,7 @@ stealth_scan() {
     
     local output="$OUTPUT_DIR/stealth_scan_${TIMESTAMP}"
     
+    check_tool nmap
     log_info "Stealth SYN scan of $target"
     log_info "Output: $output"
     echo ""
@@ -121,6 +134,7 @@ vuln_scan() {
     
     local output="$OUTPUT_DIR/vuln_scan_${TIMESTAMP}"
     
+    check_tool nmap
     log_info "Vulnerability scan of $target"
     log_info "Output: $output"
     echo ""
@@ -148,6 +162,19 @@ web_enum() {
     
     local output="$OUTPUT_DIR/web_enum_${TIMESTAMP}.txt"
     
+    check_tool gobuster
+    # Resolve wordlist — try several common locations
+    if [[ -z "$wordlist" || ! -f "$wordlist" ]]; then
+        for wl in "/usr/share/wordlists/dirb/common.txt" \
+                  "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt" \
+                  "/usr/share/dirb/wordlists/common.txt"; do
+            if [[ -f "$wl" ]]; then wordlist="$wl"; break; fi
+        done
+    fi
+    if [[ -z "$wordlist" || ! -f "$wordlist" ]]; then
+        log_error "No wordlist found. Install: sudo apt install wordlists"
+        exit 1
+    fi
     log_info "Web directory enumeration: $target"
     log_info "Wordlist: $wordlist"
     log_info "Output: $output"
@@ -174,6 +201,9 @@ smb_enum() {
     
     local output="$OUTPUT_DIR/smb_enum_${TIMESTAMP}.txt"
     
+    check_tool nmap
+    check_tool enum4linux
+    check_tool smbclient samba-client
     log_info "SMB enumeration of $target"
     log_info "Output: $output"
     echo ""
@@ -212,6 +242,7 @@ arp_scan_network() {
     log_info "ARP scan on interface $interface"
     echo ""
     
+    check_tool arp-scan arp-scan
     arp-scan --interface="$interface" --localnet
     
     log_success "ARP scan complete"
@@ -228,6 +259,9 @@ dns_enum() {
     
     local output="$OUTPUT_DIR/dns_enum_${TIMESTAMP}.txt"
     
+    check_tool nslookup dnsutils
+    check_tool dig dnsutils
+    check_tool host dnsutils
     log_info "DNS enumeration of $domain"
     log_info "Output: $output"
     echo ""
@@ -246,7 +280,14 @@ dns_enum() {
         
         echo ""
         echo "=== Zone Transfer Attempt ==="
-        dig axfr "@$domain" "$domain"
+        # Resolve the authoritative nameserver first, then attempt AXFR against it
+        local ns
+        ns=$(dig +short NS "$domain" | head -n 1)
+        if [[ -n "$ns" ]]; then
+            dig axfr "$domain" "@${ns}"
+        else
+            log_warning "Could not resolve nameserver for $domain — skipping zone transfer"
+        fi
     } | tee "$output"
     
     log_success "DNS enumeration complete"
@@ -257,10 +298,16 @@ network_discovery() {
     log_info "Discovering local network..."
     echo ""
     
+    check_tool nmap
     # Get default gateway
     local gateway=$(ip route | grep default | awk '{print $3}')
     local network=$(ip -o -f inet addr show | awk '/scope global/ {print $4}' | head -1)
-    
+
+    if [[ -z "$network" ]]; then
+        log_error "Could not determine local network CIDR. Is a network interface up with a global IP?"
+        exit 1
+    fi
+
     log_info "Gateway: $gateway"
     log_info "Network: $network"
     echo ""
@@ -283,6 +330,7 @@ comprehensive_scan() {
     local scan_dir="$OUTPUT_DIR/comprehensive_${TIMESTAMP}"
     mkdir -p "$scan_dir"
     
+    check_tool nmap
     log_info "Comprehensive scan of $target"
     log_info "Output directory: $scan_dir"
     echo ""

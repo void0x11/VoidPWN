@@ -2,6 +2,7 @@
 
 import sys
 import os
+import shutil
 import subprocess
 import argparse
 import time
@@ -35,6 +36,11 @@ def log(msg, type="INFO"):
     elif type == "ERROR":
         print(f"[{timestamp}] {RED}[-]{RESET} {msg}")
 
+def check_tool(name):
+    """Return True if the binary is available on PATH."""
+    return shutil.which(name) is not None
+
+
 def run_command(cmd, quiet=False):
     try:
         if quiet:
@@ -47,7 +53,13 @@ def run_command(cmd, quiet=False):
 
 def scan_target(target, output_dir):
     log(f"Starting smart scan on {target}")
-    
+
+    # Pre-flight: verify required tools
+    missing = [t for t in ('nmap',) if not check_tool(t)]
+    if missing:
+        log(f"Required tools not found: {', '.join(missing)}. Run: sudo apt install {' '.join(missing)}", "ERROR")
+        return
+
     # Create directory for target
     target_dir = os.path.join(output_dir, target.replace('/', '_'))
     os.makedirs(target_dir, exist_ok=True)
@@ -55,7 +67,9 @@ def scan_target(target, output_dir):
     # Phase 1: Port Scan
     log("Phase 1: Fast Port Scan")
     nmap_cmd = f"nmap -T4 -F {target} -oG {target_dir}/fast_scan.gnmap"
-    run_command(nmap_cmd, quiet=True)
+    if not run_command(nmap_cmd, quiet=True):
+        log("nmap scan failed — check that the target is reachable and nmap is installed.", "ERROR")
+        return
     
     # Parse open ports
     open_ports = []
@@ -95,19 +109,34 @@ def scan_target(target, output_dir):
         for port in found_web:
             protocol = "https" if port in ['443', '8443'] else "http"
             url = f"{protocol}://{target}:{port}"
-            
-            log(f"Running Nikto on {url}...")
-            run_command(f"nikto -h {url} -o {target_dir}/nikto_{port}.txt -T 2", quiet=True)
-            
-            log(f"Running Gobuster on {url}...")
-            run_command(f"gobuster dir -u {url} -w /usr/share/wordlists/dirb/common.txt -o {target_dir}/gobuster_{port}.txt -q", quiet=True)
+
+            if check_tool('nikto'):
+                log(f"Running Nikto on {url}...")
+                run_command(f"nikto -h {url} -o {target_dir}/nikto_{port}.txt -T 2", quiet=True)
+            else:
+                log("nikto not found — skipping web scan. Install: sudo apt install nikto", "WARN")
+
+            if check_tool('gobuster'):
+                wordlist = "/usr/share/wordlists/dirb/common.txt"
+                if not os.path.isfile(wordlist):
+                    wordlist = "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt"
+                if os.path.isfile(wordlist):
+                    log(f"Running Gobuster on {url}...")
+                    run_command(f"gobuster dir -u {url} -w {wordlist} -o {target_dir}/gobuster_{port}.txt -q", quiet=True)
+                else:
+                    log("No wordlist found — skipping gobuster. Install: sudo apt install wordlists", "WARN")
+            else:
+                log("gobuster not found — skipping dir brute-force. Install: sudo apt install gobuster", "WARN")
             
     # SMB (445)
     if '445' in open_ports:
         log("SMB detected - Checking for vulnerabilities", "INFO")
         run_command(f"nmap -p 445 --script smb-vuln* {target} -oN {target_dir}/smb_vulns.nmap")
-        log("Running Enum4Linux", "INFO")
-        run_command(f"enum4linux -a {target} > {target_dir}/enum4linux.txt", quiet=True)
+        if check_tool('enum4linux'):
+            log("Running Enum4Linux", "INFO")
+            run_command(f"enum4linux -a {target} > {target_dir}/enum4linux.txt", quiet=True)
+        else:
+            log("enum4linux not found — skipping. Install: sudo apt install enum4linux", "WARN")
 
     # SSH (22)
     if '22' in open_ports:

