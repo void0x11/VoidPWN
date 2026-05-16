@@ -178,17 +178,19 @@ register_systemd_service() {
 
     cat > "$service_file" <<EOF
 [Unit]
-Description=VoidPWN Core Orchestrator
-After=network.target
+Description=VoidPWN Dashboard Backend
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=$ROOT_DIR/dashboard
-ExecStart=/bin/bash $ROOT_DIR/voidpwn_core.sh start
-Restart=on-failure
+ExecStart=/usr/bin/python3 $ROOT_DIR/dashboard/server.py
+Restart=always
 RestartSec=3
 Environment=VOIDPWN_DIR=$ROOT_DIR
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
