@@ -1624,8 +1624,8 @@ VOIDPWN_TOOLS = {
     'nikto':     'Web server vulnerability scanner — detects misconfigurations, outdated software, dangerous files',
     'sqlmap':    'Automated SQL injection scanner — use for web targets with forms or URL parameters',
     'hydra':     'Credential brute-forcer — supports SSH, FTP, HTTP-Auth, SMB and more',
-    'john':      'Password hash cracker (CPU) — use after capturing hashes from a target',
-    'hashcat':   'GPU-accelerated password hash cracker — use after capturing hashes',
+    'john':      'Password hash cracker (CPU) — only include if the chain already captured a password hash file',
+    'hashcat':   'GPU-accelerated hash cracker — only include if the chain already captured a password hash file',
     'bettercap': 'MITM framework — ARP poisoning, credential sniffing, DNS spoofing on a LAN target',
     'wifite':    'Automated WiFi attack suite — WPA/WPA2 handshake capture and dictionary crack',
 }
@@ -1662,23 +1662,30 @@ def _build_hexstrike_cmd(tool, target, step_params):
         # Use safe built-in wordlists only — never trust LLM-provided paths
         raw_svc = str(step_params.get('service', 'ssh'))
         service = raw_svc if re.match(r'^[a-z0-9\-]+$', raw_svc) and len(raw_svc) <= 20 else 'ssh'
-        users_wl = '/usr/share/wordlists/metasploit/unix_users.txt'
-        pass_wl  = '/usr/share/wordlists/metasploit/unix_passwords.txt'
+        _wl_dir = os.path.join(VOIDPWN_DIR, 'wordlists')
+        # Prefer bundled wordlists, fall back to system metasploit lists
+        users_wl = (os.path.join(_wl_dir, 'usernames.txt')
+                    if os.path.isfile(os.path.join(_wl_dir, 'usernames.txt'))
+                    else '/usr/share/wordlists/metasploit/unix_users.txt')
+        pass_wl  = (os.path.join(_wl_dir, 'passwords.txt')
+                    if os.path.isfile(os.path.join(_wl_dir, 'passwords.txt'))
+                    else '/usr/share/wordlists/metasploit/unix_passwords.txt')
         return f'sudo hydra -L {users_wl} -P {pass_wl} {service}://{target} -t 4 -f'
 
     if tool == 'john':
-        wl = '/usr/share/wordlists/rockyou.txt'
-        return f'sudo john --wordlist={wl} "{target}"'
+        # john operates on hash files captured from the target, not the target IP itself.
+        # The attack chain should not reach this unless a hash file was already captured.
+        # Return None so the step is skipped rather than run with a wrong argument.
+        return None
 
     if tool == 'hashcat':
-        wl = '/usr/share/wordlists/rockyou.txt'
-        return f'sudo hashcat -a 0 -m 0 "{target}" {wl}'
+        return None
 
     if tool == 'bettercap':
         return f'sudo {scripts}/mitm_tools.sh --bettercap --target "{target}"'
 
     if tool == 'wifite':
-        return f'sudo {scripts}/../network/wifi_tools.sh --auto-attack'
+        return f'sudo {scripts}/wifi_tools.sh --auto-attack'
 
     return None
 
@@ -1868,7 +1875,8 @@ def hexstrike_execute():
 
     cmd = _build_hexstrike_cmd(tool, target, step_params)
     if not cmd:
-        output = f'[ERROR] No command mapping for tool: {tool}'
+        output = f'[SKIPPED] {tool} requires a locally captured file (e.g. a hash file) and cannot be run directly against a network target. Run this tool manually after capturing the relevant data.'
+        add_live_log(f'⬡ {tool.upper()} skipped — requires captured data, not a network target.', 'info')
     else:
         try:
             result = subprocess.run(

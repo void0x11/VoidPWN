@@ -19,8 +19,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 OUTPUT_DIR="$PROJECT_ROOT/output/captures"
 
-# Find a usable wordlist — auto-decompress rockyou if needed
+# Find a usable wordlist — prefer bundled repo list, then system rockyou
 find_wordlist() {
+    local bundled="$PROJECT_ROOT/wordlists/passwords.txt"
     local rockyou="/usr/share/wordlists/rockyou.txt"
     local rockyou_gz="/usr/share/wordlists/rockyou.txt.gz"
 
@@ -31,6 +32,11 @@ find_wordlist() {
     if [[ -f "$rockyou_gz" ]]; then
         log_warning "Decompressing rockyou.txt.gz..."
         gunzip -k "$rockyou_gz" && echo "$rockyou" && return 0
+    fi
+    if [[ -f "$bundled" ]]; then
+        log_warning "rockyou.txt not found, using bundled VoidPWN wordlist: $bundled"
+        echo "$bundled"
+        return 0
     fi
     # Search for any common wordlist
     local found

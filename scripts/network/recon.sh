@@ -163,9 +163,10 @@ web_enum() {
     local output="$OUTPUT_DIR/web_enum_${TIMESTAMP}.txt"
     
     check_tool gobuster
-    # Resolve wordlist — try several common locations
+    # Resolve wordlist — prefer bundled repo list, then try system locations
     if [[ -z "$wordlist" || ! -f "$wordlist" ]]; then
-        for wl in "/usr/share/wordlists/dirb/common.txt" \
+        for wl in "$PROJECT_ROOT/wordlists/web-common.txt" \
+                  "/usr/share/wordlists/dirb/common.txt" \
                   "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt" \
                   "/usr/share/dirb/wordlists/common.txt"; do
             if [[ -f "$wl" ]]; then wordlist="$wl"; break; fi
