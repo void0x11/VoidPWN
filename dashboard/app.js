@@ -484,29 +484,20 @@ async function hexstrikeStatus() {
     const res = await api('/api/hexstrike/status');
     if (res.online) {
         badge.className = 'hexstrike-badge online';
-        badge.textContent = `● ONLINE  (${res.tool_count || '?'} tools)`;
+        badge.textContent = `● READY  (${res.tool_count || '?'} tools)`;
     } else {
         badge.className = 'hexstrike-badge offline';
-        badge.textContent = '● OFFLINE';
+        badge.textContent = '● NO API KEY';
     }
 }
 
-async function hexstrikeStartServer() {
-    log('⬡ Starting HexStrike AI Engine...', 'info');
-    const res = await api('/api/hexstrike/start', 'POST');
-    if (res.error) {
-        log(`⬡ ERROR: ${res.error}`, 'error');
-        return;
-    }
-    log(`⬡ Engine starting (PID ${res.pid || '?'})...`, 'info');
-    // Give it a moment then check status
-    setTimeout(hexstrikeStatus, 2000);
+function hexstrikeStartServer() {
+    log('⬡ HexStrike runs inline — no engine to start. Configure your API key in System → AI Configuration.', 'info');
+    hexstrikeStatus();
 }
 
-async function hexstrikeStopServer() {
-    const res = await api('/api/hexstrike/stop', 'POST');
-    log(`⬡ HexStrike Engine: ${res.status}`, 'info');
-    await hexstrikeStatus();
+function hexstrikeStopServer() {
+    log('⬡ HexStrike runs inline — no engine to stop.', 'info');
 }
 
 async function hexstrikeAnalyze() {

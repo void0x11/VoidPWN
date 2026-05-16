@@ -1611,102 +1611,96 @@ Write the full professional security report now, covering each requested section
 
 
 # ============================================================
-# HexStrike AI Bridge
+# HexStrike AI — Inline Integration
+# Tools run via VoidPWN's own shell scripts; attack chains are
+# built by the same LLM already used for AI analysis.
+# No sidecar process required.
 # ============================================================
-HEXSTRIKE_URL = os.environ.get('HEXSTRIKE_URL', 'http://127.0.0.1:8888')
-HEXSTRIKE_SCRIPT = os.path.join(VOIDPWN_DIR, 'hexstrike-ai', 'hexstrike_server.py')
-TOOL_PROFILE_PATH = os.path.join(VOIDPWN_DIR, 'hexstrike-ai', 'voidpwn_tool_profile.json')
-_hexstrike_proc = None  # subprocess.Popen handle
+
+# Available tools and their descriptions (fed into the LLM prompt)
+VOIDPWN_TOOLS = {
+    'nmap':      'Network scanner — host discovery, port scan, service/version detection, OS fingerprinting, vuln NSE scripts',
+    'gobuster':  'Web directory/file brute-forcer — use for HTTP/HTTPS targets to find hidden paths',
+    'nikto':     'Web server vulnerability scanner — detects misconfigurations, outdated software, dangerous files',
+    'sqlmap':    'Automated SQL injection scanner — use for web targets with forms or URL parameters',
+    'hydra':     'Credential brute-forcer — supports SSH, FTP, HTTP-Auth, SMB and more',
+    'john':      'Password hash cracker (CPU) — use after capturing hashes from a target',
+    'hashcat':   'GPU-accelerated password hash cracker — use after capturing hashes',
+    'bettercap': 'MITM framework — ARP poisoning, credential sniffing, DNS spoofing on a LAN target',
+    'wifite':    'Automated WiFi attack suite — WPA/WPA2 handshake capture and dictionary crack',
+}
+
+# Valid scan_type values that map directly to recon.sh flags
+_NMAP_SCAN_TYPES = {'quick', 'full', 'stealth', 'vuln', 'comprehensive', 'smb', 'web', 'dns'}
 
 
-def load_tool_profile():
-    """Load the VoidPWN tool whitelist profile."""
-    try:
-        with open(TOOL_PROFILE_PATH, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return {"available_tools": ["nmap", "gobuster", "nikto", "sqlmap", "hydra", "john", "hashcat", "bettercap", "wifite"]}
+def _build_hexstrike_cmd(tool, target, step_params):
+    """
+    Map a validated tool name + LLM-supplied parameters to a concrete shell command
+    using VoidPWN's existing scripts. target and tool are already validated by the caller.
+    step_params values are sanitised before interpolation — never trusted for path construction.
+    Returns a command string, or None if the tool is unrecognised.
+    """
+    scripts = os.path.join(VOIDPWN_DIR, 'scripts', 'network')
 
+    if tool == 'nmap':
+        raw_type = str(step_params.get('scan_type', 'quick'))
+        scan_type = raw_type if raw_type in _NMAP_SCAN_TYPES else 'quick'
+        return f'sudo {scripts}/recon.sh --{scan_type} "{target}"'
 
-def hexstrike_get(path, timeout=5):
-    """Proxy a GET to HexStrike server."""
-    req = urllib.request.Request(f"{HEXSTRIKE_URL}{path}")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode('utf-8'))
+    if tool == 'gobuster':
+        return f'sudo {scripts}/recon.sh --web "{target}"'
 
+    if tool == 'nikto':
+        return f'sudo nikto -h "{target}"'
 
-def hexstrike_post(path, body, timeout=30):
-    """Proxy a POST to HexStrike server."""
-    payload = json.dumps(body).encode('utf-8')
-    req = urllib.request.Request(
-        f"{HEXSTRIKE_URL}{path}",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode('utf-8'))
+    if tool == 'sqlmap':
+        # Treat target as URL for sqlmap; --batch disables interactive prompts
+        return f'sudo sqlmap -u "{target}" --batch --level=1 --risk=1 --output-dir=/tmp/sqlmap_out'
+
+    if tool == 'hydra':
+        # Use safe built-in wordlists only — never trust LLM-provided paths
+        raw_svc = str(step_params.get('service', 'ssh'))
+        service = raw_svc if re.match(r'^[a-z0-9\-]+$', raw_svc) and len(raw_svc) <= 20 else 'ssh'
+        users_wl = '/usr/share/wordlists/metasploit/unix_users.txt'
+        pass_wl  = '/usr/share/wordlists/metasploit/unix_passwords.txt'
+        return f'sudo hydra -L {users_wl} -P {pass_wl} {service}://{target} -t 4 -f'
+
+    if tool == 'john':
+        wl = '/usr/share/wordlists/rockyou.txt'
+        return f'sudo john --wordlist={wl} "{target}"'
+
+    if tool == 'hashcat':
+        wl = '/usr/share/wordlists/rockyou.txt'
+        return f'sudo hashcat -a 0 -m 0 "{target}" {wl}'
+
+    if tool == 'bettercap':
+        return f'sudo {scripts}/mitm_tools.sh --bettercap --target "{target}"'
+
+    if tool == 'wifite':
+        return f'sudo {scripts}/../network/wifi_tools.sh --auto-attack'
+
+    return None
 
 
 @app.route('/api/hexstrike/status')
 def hexstrike_status():
-    """Check if HexStrike server is running."""
-    try:
-        data = hexstrike_get('/health', timeout=3)
-        tool_count = len(data.get('tools', data.get('available_tools', [])))
-        return jsonify({'online': True, 'tool_count': tool_count, 'version': data.get('version', 'unknown')})
-    except Exception:
-        return jsonify({'online': False, 'tool_count': 0, 'version': 'N/A'})
-
-
-@app.route('/api/hexstrike/start', methods=['POST'])
-def hexstrike_start():
-    """Start the HexStrike server subprocess."""
-    global _hexstrike_proc
-    if _hexstrike_proc and _hexstrike_proc.poll() is None:
-        return jsonify({'status': 'already_running'})
-    if not os.path.isfile(HEXSTRIKE_SCRIPT):
-        return jsonify({'error': f'hexstrike_server.py not found at {HEXSTRIKE_SCRIPT}'}), 404
-    try:
-        # Capture stderr so import/startup errors surface in the dashboard log
-        _hexstrike_proc = subprocess.Popen(
-            ['python3', HEXSTRIKE_SCRIPT],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE
-        )
-        # Give it 3 seconds — if it crashes immediately we capture why
-        import threading
-        def _log_stderr(proc):
-            try:
-                err = proc.stderr.read(4096).decode('utf-8', errors='replace').strip()
-                if err:
-                    add_live_log(f'⬡ HexStrike stderr: {err[:500]}', 'error')
-            except Exception:
-                pass
-        threading.Thread(target=_log_stderr, args=(_hexstrike_proc,), daemon=True).start()
-        add_live_log('⬡ HexStrike AI Engine starting (PID {})...'.format(_hexstrike_proc.pid), 'info')
-        return jsonify({'status': 'started', 'pid': _hexstrike_proc.pid})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/hexstrike/stop', methods=['POST'])
-def hexstrike_stop():
-    """Stop the HexStrike server subprocess."""
-    global _hexstrike_proc
-    if _hexstrike_proc and _hexstrike_proc.poll() is None:
-        _hexstrike_proc.terminate()
-        _hexstrike_proc = None
-        add_live_log('⬡ HexStrike AI Engine stopped.', 'info')
-        return jsonify({'status': 'stopped'})
-    return jsonify({'status': 'not_running'})
+    """Report readiness: API key configured + count available tools on this device."""
+    cfg = load_config()
+    has_key = bool(cfg.get('api_key', '').strip())
+    tool_count = sum(1 for t in VOIDPWN_TOOLS if check_tool(t))
+    return jsonify({
+        'online': has_key,
+        'tool_count': tool_count,
+        'version': 'inline-v1'
+    })
 
 
 @app.route('/api/hexstrike/analyze', methods=['POST'])
 def hexstrike_analyze():
     """
-    Ask HexStrike DecisionEngine to profile the target and build an attack chain.
-    Constrains tool selection to VoidPWN's installed toolset via the profile whitelist.
+    Profile the target and build an attack chain using the configured LLM.
+    No sidecar required — calls call_gemini/groq/openai directly.
     """
     data = request.get_json() or {}
     target = data.get('target', '').strip()
@@ -1715,7 +1709,6 @@ def hexstrike_analyze():
     if not target:
         return jsonify({'error': 'Target is required'}), 400
 
-    # Validate target — IP, CIDR, hostname
     if not re.match(r'^[a-zA-Z0-9.\-/:_]+$', target) or len(target) > 253:
         return jsonify({'error': 'Invalid target format'}), 400
 
@@ -1723,71 +1716,134 @@ def hexstrike_analyze():
     if objective not in allowed_objectives:
         return jsonify({'error': 'Invalid objective'}), 400
 
-    tool_profile = load_tool_profile()
-    allowed = set(tool_profile.get('available_tools', []))
-    fallback_map = tool_profile.get('fallback_map', {})
+    cfg = load_config()
+    api_key = cfg.get('api_key', '').strip()
+    provider = cfg.get('provider', 'gemini')
+
+    if not api_key:
+        return jsonify({'error': 'No API key configured. Go to System → AI Configuration to add your key.'}), 400
+
+    if not check_internet():
+        return jsonify({'error': 'No internet connection. AI analysis requires internet access.'}), 502
+
+    # Build tool list description for the prompt
+    tool_descriptions = '\n'.join(f'  - {t}: {d}' for t, d in VOIDPWN_TOOLS.items())
+    step_limit = '3' if objective == 'quick' else '5'
+    stealth_note = 'Prefer nmap with scan_type=stealth. Avoid noisy tools.' if objective == 'stealth' else ''
+
+    prompt = f"""You are a penetration testing AI assistant. Analyse the given target and produce a structured attack chain using ONLY the tools listed below.
+
+TARGET: {target}
+OBJECTIVE: {objective} ({'fast recon, max 3 steps' if objective == 'quick' else 'full assessment, max 5 steps' if objective == 'comprehensive' else 'quiet/slow, max 4 steps'})
+{stealth_note}
+
+AVAILABLE TOOLS:
+{tool_descriptions}
+
+RULES:
+- Use only tools from the list above.
+- Maximum {step_limit} steps. No duplicate tools.
+- For nmap, set scan_type to one of: quick, full, stealth, vuln, comprehensive, smb (match the objective).
+- For web targets (http/https URLs) include gobuster and/or nikto.
+- For quick objective: start with nmap quick scan only.
+- success_probability and confidence_score must be floats between 0.0 and 1.0.
+- execution_time_estimate must be an integer (seconds).
+
+Return ONLY valid JSON — no markdown, no explanation, no code fences — in exactly this structure:
+{{
+  "target_profile": {{
+    "target": "{target}",
+    "target_type": "host|web|network|wireless|domain",
+    "risk_level": "high|medium|low",
+    "attack_surface_score": "1-10",
+    "confidence_score": 0.8,
+    "technologies": []
+  }},
+  "attack_chain": {{
+    "steps": [
+      {{
+        "tool": "tool_name",
+        "scan_type": "quick",
+        "expected_outcome": "Brief description of what this step finds",
+        "execution_time_estimate": 60,
+        "success_probability": 0.9
+      }}
+    ],
+    "success_probability": 0.85,
+    "estimated_time": 120
+  }}
+}}"""
 
     try:
-        # Single call to the real DecisionEngine endpoint — returns target profile +
-        # full AttackChain with per-tool optimized parameters from optimize_parameters()
-        hs_response = hexstrike_post('/api/intelligence/create-attack-chain', {
-            'target': target,
-            'objective': objective
-        }, timeout=60)
+        if provider == 'gemini':
+            raw = call_gemini(api_key, prompt)
+        elif provider == 'groq':
+            raw = call_groq(api_key, prompt)
+        elif provider == 'openai':
+            raw = call_openai(api_key, prompt)
+        else:
+            return jsonify({'error': f'Unknown provider: {provider}'}), 400
     except Exception as e:
-        return jsonify({'error': f'HexStrike offline or unreachable: {str(e)}. Start the engine first.'}), 503
+        return jsonify({'error': f'LLM request failed: {str(e)}'}), 503
 
-    if not hs_response.get('success'):
-        return jsonify({'error': hs_response.get('error', 'DecisionEngine returned no result')}), 502
+    # Strip markdown fences if the LLM wrapped the JSON
+    cleaned = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip(), flags=re.MULTILINE).strip()
+    # Extract first JSON object if there's surrounding text
+    json_match = re.search(r'\{[\s\S]*\}', cleaned)
+    if not json_match:
+        return jsonify({'error': 'LLM returned non-JSON response. Try again.'}), 502
 
-    raw_profile = hs_response.get('target_profile', {})
-    attack_chain = hs_response.get('attack_chain', {})
+    try:
+        parsed = json.loads(json_match.group(0))
+    except json.JSONDecodeError as e:
+        return jsonify({'error': f'LLM returned malformed JSON: {str(e)}'}), 502
+
+    raw_profile = parsed.get('target_profile', {})
+    attack_chain = parsed.get('attack_chain', {})
     raw_steps = attack_chain.get('steps', [])
 
-    # Filter attack chain to tools installed on this device (whitelist enforcement)
+    if not isinstance(raw_steps, list):
+        return jsonify({'error': 'LLM returned invalid attack chain structure. Try again.'}), 502
+
+    # Build chain — enforce tool whitelist and deduplicate
     chain = []
     seen = set()
     for step in raw_steps:
-        tool_name = step.get('tool', '')
-        params = step.get('parameters', {})
-        # Substitute excluded/unavailable tools via fallback map
-        if tool_name not in allowed:
-            tool_name = fallback_map.get(tool_name, '')
-        if not tool_name or tool_name not in allowed or tool_name in seen:
+        tool_name = str(step.get('tool', '')).strip().lower()
+        if tool_name not in VOIDPWN_TOOLS or tool_name in seen:
             continue
         seen.add(tool_name)
-        fallback_tool = fallback_map.get(tool_name, '')
         chain.append({
             'tool': tool_name,
-            'parameters': params,          # real per-tool optimized params from DecisionEngine
-            'description': step.get('expected_outcome', f'Run {tool_name} against {target}'),
-            'estimated_time': step.get('execution_time_estimate', 'varies'),
-            'success_probability': step.get('success_probability', 0),
-            'fallback': fallback_tool if fallback_tool != tool_name else ''
+            'parameters': {'scan_type': step.get('scan_type', 'quick')},
+            'description': str(step.get('expected_outcome', f'Run {tool_name} against {target}'))[:200],
+            'estimated_time': step.get('execution_time_estimate', 60),
+            'success_probability': float(step.get('success_probability', 0.5)),
+            'fallback': ''
         })
 
     return jsonify({
         'target_profile': {
-            'target': raw_profile.get('target', target),
-            'type': raw_profile.get('target_type', 'unknown'),
-            'risk_level': raw_profile.get('risk_level', 'unknown'),
-            'attack_surface_score': raw_profile.get('attack_surface_score', 'N/A'),
-            'confidence': raw_profile.get('confidence_score', 'N/A'),
-            'technologies': raw_profile.get('technologies', [])
+            'target': str(raw_profile.get('target', target)),
+            'type': str(raw_profile.get('target_type', 'unknown')),
+            'risk_level': str(raw_profile.get('risk_level', 'unknown')),
+            'attack_surface_score': str(raw_profile.get('attack_surface_score', 'N/A')),
+            'confidence': str(raw_profile.get('confidence_score', 'N/A')),
+            'technologies': [str(t) for t in raw_profile.get('technologies', []) if isinstance(t, str)]
         },
         'chain': chain,
         'objective': objective,
-        'success_probability': attack_chain.get('success_probability', 0),
-        'estimated_time': attack_chain.get('estimated_time', 0)
+        'success_probability': float(attack_chain.get('success_probability', 0.5)),
+        'estimated_time': int(attack_chain.get('estimated_time', 0))
     })
 
 
 @app.route('/api/hexstrike/execute', methods=['POST'])
 def hexstrike_execute():
     """
-    Execute a single tool step from a HexStrike attack chain.
-    Streams output to LIVE_LOGS, appends to a mission log file, and
-    after the last step calls Gemini to write an AI analysis report.
+    Execute a single tool step from a HexStrike attack chain using VoidPWN's
+    own shell scripts. Blocks until the tool finishes (Flask is threaded).
+    On the last step, generates an AI analysis report.
     """
     data = request.get_json() or {}
     target = data.get('target', '').strip()
@@ -1796,17 +1852,13 @@ def hexstrike_execute():
     step_index = data.get('step_index', 0)
     total_steps = data.get('total_steps', 1)
     mission_id = data.get('mission_id', str(uuid.uuid4()))
-    log_file = data.get('log_file', gen_log_name(f'hexstrike_mission'))
-    # Optimized parameters supplied by DecisionEngine.optimize_parameters() at analyze time
+    log_file = data.get('log_file', gen_log_name('hexstrike_mission'))
     step_params = data.get('step_params', {})
 
     if not target or not tool:
         return jsonify({'error': 'target and tool are required'}), 400
 
-    # Validate tool against whitelist
-    profile = load_tool_profile()
-    allowed = set(profile.get('available_tools', []))
-    if tool not in allowed:
+    if tool not in VOIDPWN_TOOLS:
         return jsonify({'error': f'Tool "{tool}" is not in VoidPWN tool whitelist'}), 400
 
     if not re.match(r'^[a-zA-Z0-9.\-/:_]+$', target) or len(target) > 253:
@@ -1814,48 +1866,39 @@ def hexstrike_execute():
 
     add_live_log(f'⬡ HexStrike [{step_index+1}/{total_steps}] executing: {tool} → {target}', 'info')
 
-    # Build payload: start with DecisionEngine's optimized params, then ensure target
-    # is set under the right field name (nmap/nikto use 'target', gobuster/sqlmap use 'url').
-    def _build_tool_payload(t, params, tgt):
-        payload = {k: v for k, v in params.items() if v is not None}
-        if 'url' in payload:
-            payload['url'] = tgt
-        else:
-            payload['target'] = tgt
-        return payload
-
-    tool_payload = _build_tool_payload(tool, step_params, target)
-
-    try:
-        result = hexstrike_post(f'/api/tools/{tool}', tool_payload, timeout=300)
-        output = result.get('output', result.get('result', json.dumps(result)))
-    except Exception as e:
-        # Try fallback tool — use minimal safe payload
-        fallback = profile.get('fallback_map', {}).get(tool)
-        if fallback and fallback in allowed:
-            add_live_log(f'⚡ Auto-recovery: {tool} failed, switching to fallback [{fallback}]', 'info')
-            try:
-                fb_payload = _build_tool_payload(fallback, step_params, target)
-                result = hexstrike_post(f'/api/tools/{fallback}', fb_payload, timeout=300)
-                output = result.get('output', result.get('result', json.dumps(result)))
-                tool = fallback  # record actual tool used
-            except Exception as e2:
-                output = f'[ERROR] {tool} and fallback {fallback} both failed: {str(e2)}'
-        else:
+    cmd = _build_hexstrike_cmd(tool, target, step_params)
+    if not cmd:
+        output = f'[ERROR] No command mapping for tool: {tool}'
+    else:
+        try:
+            result = subprocess.run(
+                cmd, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, timeout=300
+            )
+            output = result.stdout or ''
+        except subprocess.TimeoutExpired:
+            output = f'[TIMEOUT] {tool} exceeded 300 second limit.'
+        except Exception as e:
             output = f'[ERROR] {tool} failed: {str(e)}'
+
+    # Stream first 100 lines to live HUD
+    for line in output.splitlines()[:100]:
+        if line.strip():
+            add_live_log(line.strip(), 'info')
 
     add_live_log(f'⬡ {tool.upper()} step complete', 'success')
 
-    # Write step output to mission log
+    # Append step output to mission log
     log_path = os.path.join(LOGS_DIR, os.path.basename(log_file))
     try:
         with open(log_path, 'a') as lf:
             lf.write(f'\n\n=== STEP {step_index+1}: {tool.upper()} ===\n')
-            lf.write(str(output))
+            lf.write(output)
     except Exception:
         pass
 
-    # On last step: generate Gemini AI summary and save full report
+    # On last step: generate AI summary and save full report
     ai_analysis = None
     if step_index + 1 >= total_steps:
         try:
@@ -1870,7 +1913,7 @@ def hexstrike_execute():
 
             if api_key and check_internet():
                 structured = summarize_log(full_log) if full_log else f'Target: {target}, Objective: {objective}'
-                prompt = (
+                report_prompt = (
                     f"You are a senior penetration tester reviewing a VoidPWN AI-driven security assessment.\n"
                     f"Target: {target}\nObjective: {objective}\n\n"
                     f"Tool outputs (structured summary):\n{structured}\n\n"
@@ -1882,17 +1925,16 @@ def hexstrike_execute():
                     f"Be specific and actionable. Use markdown formatting."
                 )
                 if provider == 'gemini':
-                    ai_analysis = call_gemini(api_key, prompt)
+                    ai_analysis = call_gemini(api_key, report_prompt)
                 elif provider == 'groq':
-                    ai_analysis = call_groq(api_key, prompt)
+                    ai_analysis = call_groq(api_key, report_prompt)
                 elif provider == 'openai':
-                    ai_analysis = call_openai(api_key, prompt)
+                    ai_analysis = call_openai(api_key, report_prompt)
                 add_live_log('⬡ HexStrike AI analysis complete — report saved.', 'success')
         except Exception as e:
             ai_analysis = None
             add_live_log(f'⬡ AI analysis skipped: {str(e)}', 'info')
 
-        # Save full mission report entry
         chain_tools = data.get('chain_tools', [tool])
         report_entry = {
             'id': mission_id,
@@ -1914,7 +1956,7 @@ def hexstrike_execute():
         'status': 'success',
         'tool': tool,
         'step': step_index + 1,
-        'output_preview': str(output)[:500],
+        'output_preview': output[:500],
         'log_file': os.path.basename(log_file),
         'mission_id': mission_id,
         'ai_analysis': ai_analysis
@@ -1923,12 +1965,20 @@ def hexstrike_execute():
 
 @app.route('/api/hexstrike/processes')
 def hexstrike_processes():
-    """Proxy active process list from HexStrike."""
-    try:
-        data = hexstrike_get('/api/processes/dashboard', timeout=5)
-        return jsonify(data)
-    except Exception:
-        return jsonify({'processes': [], 'error': 'HexStrike offline'})
+    """List running security tool processes using psutil."""
+    processes = []
+    if psutil:
+        try:
+            tool_names = set(VOIDPWN_TOOLS.keys()) | {'aircrack-ng', 'airodump-ng', 'aireplay-ng', 'masscan'}
+            now = time.time()
+            for proc in psutil.process_iter(['name', 'create_time']):
+                pname = (proc.info.get('name') or '').lower()
+                if pname in tool_names:
+                    elapsed = int(now - (proc.info.get('create_time') or now))
+                    processes.append({'tool': pname, 'progress': 0, 'elapsed': elapsed})
+        except Exception:
+            pass
+    return jsonify({'processes': processes})
 
 
 if __name__ == '__main__':
