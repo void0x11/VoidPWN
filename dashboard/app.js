@@ -64,6 +64,14 @@ function switchTab(tabId) {
     document.body.classList.toggle('reports-active', tabId === 'reports');
 
     if (tabId === 'reports') loadReports();
+
+    // HexStrike side-effects — defer via setTimeout so hs/hexstrikeStatus are in scope
+    if (tabId === 'hexstrike') {
+        setTimeout(() => hexstrikeStatus(), 0);
+    } else if (typeof hs !== 'undefined' && hs.pollInterval) {
+        clearInterval(hs.pollInterval);
+        hs.pollInterval = null;
+    }
 }
 
 function initRefresh() {
@@ -461,20 +469,7 @@ const hs = {
     currentStep: 0
 };
 
-// Poll HexStrike status when tab becomes active
-const _origSwitchTab = switchTab;
-function switchTab(tabId) {
-    _origSwitchTab(tabId);
-    if (tabId === 'hexstrike') {
-        hexstrikeStatus();
-    } else {
-        // Stop process polling when leaving HexStrike tab
-        if (hs.pollInterval) {
-            clearInterval(hs.pollInterval);
-            hs.pollInterval = null;
-        }
-    }
-}
+// HexStrike tab side-effects are handled directly inside switchTab above.
 
 async function hexstrikeStatus() {
     const badge = document.getElementById('hs-badge');
