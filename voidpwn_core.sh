@@ -196,8 +196,8 @@ Restart=always
 RestartSec=3
 Environment=VOIDPWN_DIR=$ROOT_DIR
 Environment=PYTHONUNBUFFERED=1
-StandardOutput=journal+console
-StandardError=journal+console
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -205,9 +205,42 @@ EOF
 
     run_critical "Reloading systemd" systemctl daemon-reload
     run_critical "Enabling voidpwn service" systemctl enable voidpwn.service
-    # Start immediately so install does not require a manual restart
-    systemctl start voidpwn.service >/dev/null 2>&1 || true
-    log_ok "Service registered, enabled, and started"
+
+    # Stop any stale instance before starting fresh
+    systemctl stop voidpwn.service 2>/dev/null || true
+    sleep 1
+
+    if ! systemctl start voidpwn.service; then
+        log_error "Service failed to start — last 10 journal lines:"
+        journalctl -u voidpwn -n 10 --no-pager 2>/dev/null || true
+        return 1
+    fi
+
+    # Wait up to 15s for the process to be active
+    local attempts=0
+    while [[ $attempts -lt 15 ]]; do
+        if systemctl is-active --quiet voidpwn.service; then
+            break
+        fi
+        sleep 1
+        (( attempts++ )) || true
+    done
+
+    if systemctl is-active --quiet voidpwn.service; then
+        log_ok "Service registered, enabled, and started"
+        # Resolve accessible IP from bash so user always sees the URL
+        local pi_ip
+        pi_ip="$(ip route get 8.8.8.8 2>/dev/null | awk '/src/ {for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)"
+        if [[ -n "$pi_ip" ]]; then
+            log_ok "Dashboard accessible at: http://$pi_ip:5000"
+            mkdir -p "$LOG_DIR"
+            echo "http://$pi_ip:5000" > "$LOG_DIR/access_url.txt"
+        fi
+        log_ok "Also available locally at: http://localhost:5000"
+    else
+        log_error "Service did not become active after 15s — last 20 journal lines:"
+        journalctl -u voidpwn -n 20 --no-pager 2>/dev/null || true
+    fi
 }
 
 remove_monitor_interfaces() {

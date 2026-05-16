@@ -2043,11 +2043,25 @@ if __name__ == '__main__':
     print("=" * 55, flush=True)
     print("[VOIDPWN] Dashboard server starting...", flush=True)
     lan_ips = _get_lan_ips()
+    url_lines = []
     if lan_ips:
         for ip in lan_ips:
-            print(f"[VOIDPWN] Accessible at: http://{ip}:5000", flush=True)
+            line = f"http://{ip}:5000"
+            url_lines.append(line)
+            print(f"[VOIDPWN] Accessible at: {line}", flush=True)
     else:
         print("[VOIDPWN] Accessible at: http://<PI_IP>:5000", flush=True)
     print("[VOIDPWN] Local access:  http://localhost:5000", flush=True)
     print("=" * 55, flush=True)
+    # Write URL to a file so it is always discoverable even if journald is not checked
+    try:
+        import os as _os
+        _log_dir = '/var/log/voidpwn'
+        _os.makedirs(_log_dir, exist_ok=True)
+        with open(f'{_log_dir}/access_url.txt', 'w') as _f:
+            for _u in url_lines:
+                _f.write(_u + '\n')
+            _f.write('http://localhost:5000\n')
+    except Exception:
+        pass
     app.run(host='0.0.0.0', port=5000, debug=False)
