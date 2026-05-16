@@ -2020,6 +2020,34 @@ def hexstrike_processes():
 
 
 if __name__ == '__main__':
-    print("Starting VoidPWN Dashboard Server...")
-    print("Access dashboard at: http://<PI_IP>:5000")
+    import socket as _socket
+    def _get_lan_ips():
+        ips = []
+        try:
+            for info in _socket.getaddrinfo(_socket.gethostname(), None):
+                ip = info[4][0]
+                if not ip.startswith('127.') and ':' not in ip:
+                    ips.append(ip)
+        except Exception:
+            pass
+        # fallback: UDP trick — no packet is actually sent
+        try:
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 80))
+            ips.insert(0, s.getsockname()[0])
+            s.close()
+        except Exception:
+            pass
+        return list(dict.fromkeys(ips))  # deduplicate, preserve order
+
+    print("=" * 55, flush=True)
+    print("[VOIDPWN] Dashboard server starting...", flush=True)
+    lan_ips = _get_lan_ips()
+    if lan_ips:
+        for ip in lan_ips:
+            print(f"[VOIDPWN] Accessible at: http://{ip}:5000", flush=True)
+    else:
+        print("[VOIDPWN] Accessible at: http://<PI_IP>:5000", flush=True)
+    print("[VOIDPWN] Local access:  http://localhost:5000", flush=True)
+    print("=" * 55, flush=True)
     app.run(host='0.0.0.0', port=5000, debug=False)
