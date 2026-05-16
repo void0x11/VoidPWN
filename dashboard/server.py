@@ -707,10 +707,15 @@ def action_stop_all():
     """Stop all active attacks and scans"""
     global SCAN_RUNNING
     try:
-        # Kill common attack tools
-        tools = ['aireplay-ng', 'airodump-ng', 'airbase-ng', 'wifite', 'bettercap', 'hcxdumptool', 'mdk4', 'nmap', 'reaver', 'bully']
-        for tool in tools:
-            subprocess.run(['sudo', 'killall', tool], stderr=subprocess.DEVNULL)
+        core_script = os.path.join(VOIDPWN_DIR, 'voidpwn_core.sh')
+        if os.path.exists(core_script):
+            os.chmod(core_script, 0o755)
+            subprocess.run(['sudo', core_script, 'stop'], capture_output=True, text=True, timeout=120)
+        else:
+            # Fallback: legacy stop behavior if unified script is missing
+            tools = ['aireplay-ng', 'airodump-ng', 'airbase-ng', 'wifite', 'bettercap', 'hcxdumptool', 'mdk4', 'nmap', 'reaver', 'bully']
+            for tool in tools:
+                subprocess.run(['sudo', 'killall', tool], stderr=subprocess.DEVNULL)
             
         SCAN_RUNNING = False
         add_live_log("🛑 STOPPED ALL ATTACKS", "error")
