@@ -30,8 +30,25 @@ import uuid
 import collections
 import threading
 
+# Ensure systemd-launched process can find tools commonly installed in sbin paths.
+REQUIRED_PATH_PREFIX = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+current_path = os.environ.get('PATH', '')
+if REQUIRED_PATH_PREFIX not in current_path:
+    os.environ['PATH'] = f"{REQUIRED_PATH_PREFIX}:{current_path}" if current_path else REQUIRED_PATH_PREFIX
+
 # --- Circular Log for Live HUD ---
 LIVE_LOGS = collections.deque(maxlen=100)
+
+def root_shell_cmd(cmd_str):
+    """Normalize root command execution: drop sudo when already root; add when non-root."""
+    clean = (cmd_str or '').strip()
+    if not clean:
+        return clean
+
+    if os.geteuid() == 0:
+        return clean[5:] if clean.startswith('sudo ') else clean
+
+    return clean if clean.startswith('sudo ') else f"sudo {clean}"
 
 def add_live_log(msg, type="info"):
     timestamp = datetime.now().strftime('%H:%M:%S')
@@ -72,6 +89,7 @@ ERROR_KEYWORDS = ('command not found', 'no such file', 'not found', 'error:', 'p
 def run_proc_and_capture(cmd_str, log_file=None, report_id=None):
     """Run a process in the background and capture its output to LIVE_LOGS and optionally a file"""
     try:
+        cmd_str = root_shell_cmd(cmd_str)
         if not cmd_str.startswith('stdbuf'):
             cmd_str = f"stdbuf -oL -eL {cmd_str}"
             
@@ -113,7 +131,7 @@ def run_proc_and_capture(cmd_str, log_file=None, report_id=None):
             parts = cmd_str.split()
             mission_name = "Mission"
             for p in parts:
-                if not p.startswith('-') and p not in ['sudo', 'stdbuf', '-oL', '-eL']:
+                if not p.startswith('-') and p not in ['sudo', 'stdbuf', '-oL', '-eL', 'bash', '/bin/bash']:
                     mission_name = p.split('/')[-1].replace('"','')
                     break
             
@@ -668,7 +686,7 @@ def download_log(filename):
 def action_switch_tft():
     """Switch to TFT output (install_lcd.sh)"""
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/core/install_lcd.sh"
+        cmd = root_shell_cmd(f"bash {VOIDPWN_DIR}/scripts/core/install_lcd.sh")
         subprocess.Popen(cmd, shell=True)
         
         reporter.add_report(
@@ -710,12 +728,14 @@ def action_stop_all():
         core_script = os.path.join(VOIDPWN_DIR, 'voidpwn_core.sh')
         if os.path.exists(core_script):
             os.chmod(core_script, 0o755)
-            subprocess.run(['sudo', core_script, 'stop'], capture_output=True, text=True, timeout=120)
+            stop_cmd = root_shell_cmd(f'"{core_script}" stop')
+            subprocess.run(stop_cmd, shell=True, capture_output=True, text=True, timeout=120)
         else:
             # Fallback: legacy stop behavior if unified script is missing
             tools = ['aireplay-ng', 'airodump-ng', 'airbase-ng', 'wifite', 'bettercap', 'hcxdumptool', 'mdk4', 'nmap', 'reaver', 'bully']
             for tool in tools:
-                subprocess.run(['sudo', 'killall', tool], stderr=subprocess.DEVNULL)
+                kill_cmd = root_shell_cmd(f'killall {shlex.quote(tool)}')
+                subprocess.run(kill_cmd, shell=True, stderr=subprocess.DEVNULL)
             
         SCAN_RUNNING = False
         add_live_log("🛑 STOPPED ALL ATTACKS", "error")
@@ -739,14 +759,14 @@ def start_scan():
         os.makedirs(output_dir, exist_ok=True)
         
         # Kill any existing scans
-        subprocess.run(['sudo', 'killall', 'airodump-ng'], stderr=subprocess.DEVNULL)
+        subprocess.run(root_shell_cmd('killall airodump-ng'), shell=True, stderr=subprocess.DEVNULL)
         
         # Clean old scan results
         output_base = os.path.join(output_dir, 'scan_results')
         subprocess.run(f"sudo rm -f {output_base}*", shell=True, stderr=subprocess.DEVNULL)
         
         # Start scan using wifi_tools.sh --scan (15 second scan)
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --scan"
+        cmd = root_shell_cmd(f"bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --scan")
         subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         SCAN_RUNNING = True
@@ -767,7 +787,7 @@ def stop_scan():
     """Stop the background airodump scan"""
     global SCAN_RUNNING
     try:
-        subprocess.run(['sudo', 'killall', 'airodump-ng'], stderr=subprocess.DEVNULL)
+        subprocess.run(root_shell_cmd('killall airodump-ng'), shell=True, stderr=subprocess.DEVNULL)
         SCAN_RUNNING = False
         reporter.add_report("SCAN", "WiFi Networks", "Stopped", "Network scan stopped")
         return jsonify({'status': 'success', 'message': 'Scan stopped'})
@@ -823,8 +843,8 @@ def get_scan_results():
 def action_monitor_on():
     """Enable monitor mode"""
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --monitor-on"
-        subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        cmd = root_shell_cmd(f"bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --monitor-on")
+        subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         reporter.add_report("WIFI (MONITOR-ON)", "Interface", "Success", "Enabled Monitor Mode")
         return jsonify({'status': 'success', 'message': 'Monitor mode enabling...'})
     except Exception as e:
@@ -834,8 +854,8 @@ def action_monitor_on():
 def action_monitor_off():
     """Disable monitor mode"""
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --monitor-off"
-        subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        cmd = root_shell_cmd(f"bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --monitor-off")
+        subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         reporter.add_report("WIFI (MONITOR-OFF)", "Interface", "Success", "Disabled Monitor Mode")
         return jsonify({'status': 'success', 'message': 'Monitor mode disabling...'})
     except Exception as e:
@@ -855,7 +875,7 @@ def action_evil_twin():
     
     try:
         log_file = gen_log_name(f"eviltwin_{ssid}")
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --evil-twin \"{ssid}\" {channel}"
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --evil-twin \"{ssid}\" {channel}"
         
         report = reporter.add_report(
             "WIFI (EVIL TWIN)", 
@@ -886,7 +906,7 @@ def action_display_deauth():
     
     try:
         log_file = gen_log_name(f"deauth_{ssid}")
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --deauth {shlex.quote(str(bssid))} 0 {shlex.quote(str(channel))}"
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --deauth {shlex.quote(str(bssid))} 0 {shlex.quote(str(channel))}"
         
         report = reporter.add_report(
             "WIFI (DEAUTH)", 
@@ -906,7 +926,7 @@ def action_display_deauth():
 def action_reboot():
     """Reboot system"""
     try:
-        subprocess.Popen(['sudo', 'reboot'])
+        subprocess.Popen(root_shell_cmd('reboot'), shell=True)
         return jsonify({'status': 'success', 'message': 'System rebooting...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -915,7 +935,7 @@ def action_reboot():
 def action_shutdown():
     """Shutdown system"""
     try:
-        subprocess.Popen(['sudo', 'shutdown', 'now'])
+        subprocess.Popen(root_shell_cmd('shutdown now'), shell=True)
         return jsonify({'status': 'success', 'message': 'System shutting down...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -953,7 +973,7 @@ def action_handshake():
     
     try:
         log_file = gen_log_name(f"handshake_{ssid}")
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --handshake {shlex.quote(str(bssid))} {shlex.quote(str(channel))} {shlex.quote(str(ssid))}"
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --handshake {shlex.quote(str(bssid))} {shlex.quote(str(channel))} {shlex.quote(str(ssid))}"
         
         report = reporter.add_report(
             "WIFI (HANDSHAKE)", 
@@ -991,7 +1011,7 @@ def action_crack():
             "Wordlist attack initiated",
             log_file=log_file
         )
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --crack \"{latest_cap}\""
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --crack \"{latest_cap}\""
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         add_live_log(f"CRACKING STARTED: {filename}", "info")
         return jsonify({'status': 'success', 'message': f'Cracking {filename}...'})
@@ -1013,7 +1033,7 @@ def action_wifite():
             log_file=log_file
         )
         
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auto-attack"
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auto-attack"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         add_live_log("WIFITE AUTO-ATTACK STARTED", "info")
         return jsonify({'status': 'success', 'message': 'Launched Wifite Auto-Attack'})
@@ -1042,7 +1062,7 @@ def action_recon():
     try:
         log_file = gen_log_name(f"recon_{mode}")
         flag = f"--{mode}"
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/recon.sh {flag} \"{target}\""
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/recon.sh {flag} \"{target}\""
         
         report = reporter.add_report(
             f"RECON ({mode.upper()})", 
@@ -1078,7 +1098,7 @@ def action_pmkid():
             f"Capture running for {duration}s",
             log_file=log_file
         )
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pmkid {shlex.quote(str(duration))}"
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pmkid {shlex.quote(str(duration))}"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'PMKID capture started ({duration}s)...'})
     except Exception as e:
@@ -1105,9 +1125,9 @@ def action_beacon():
             ssid_file_abs = os.path.realpath(ssid_file)
             if not ssid_file_abs.startswith(VOIDPWN_DIR):
                 return jsonify({'error': 'Invalid ssid_file path'}), 400
-            cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon {shlex.quote(ssid_file_abs)}"
+            cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon {shlex.quote(ssid_file_abs)}"
         else:
-            cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon"
+            cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --beacon"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': 'Beacon flood started...'})
     except Exception as e:
@@ -1130,7 +1150,7 @@ def action_auth_flood():
             "MDK4 Authentication Flooding active",
             log_file=log_file
         )
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auth \"{target}\""
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --auth \"{target}\""
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'Auth flood against {target or "ALL"} started...'})
     except Exception as e:
@@ -1156,7 +1176,7 @@ def action_pixie():
             "WPS Pixie-Dust attack initiated",
             log_file=log_file
         )
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pixie \"{target}\""
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_tools.sh --pixie \"{target}\""
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'Pixie-Dust attack launched on {target}...'})
     except Exception as e:
@@ -1182,7 +1202,7 @@ def action_bettercap():
     try:
         report = reporter.add_report("MITM (BETTERCAP)", target or "SUBNET", "Running",
                             "ARP poison + credential sniff active", log_file=log_file)
-        cmd = f"sudo {MITM_TOOLS_SCRIPT} --bettercap"
+        cmd = f"sudo bash {MITM_TOOLS_SCRIPT} --bettercap"
         if interface:
             cmd += f" --interface {shlex.quote(interface)}"
         if target:
@@ -1217,7 +1237,7 @@ def action_dnsspoof():
     try:
         report = reporter.add_report("MITM (DNS-SPOOF)", f"{domain} → {redirect_ip}", "Running",
                             f"Spoofing {domain} to {redirect_ip}", log_file=log_file)
-        cmd = f"sudo {MITM_TOOLS_SCRIPT} --dnsspoof --domain {domain} --redirect {redirect_ip}"
+        cmd = f"sudo bash {MITM_TOOLS_SCRIPT} --dnsspoof --domain {domain} --redirect {redirect_ip}"
         if interface:
             cmd += f" --interface {interface}"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
@@ -1243,7 +1263,7 @@ def action_eaphammer():
     try:
         report = reporter.add_report("WIFI (ENTERPRISE)", ssid, "Running",
                             f"WPA Enterprise rogue AP broadcasting as '{ssid}'", log_file=log_file)
-        cmd = f"sudo {MITM_TOOLS_SCRIPT} --eaphammer --ssid \"{ssid}\""
+        cmd = f"sudo bash {MITM_TOOLS_SCRIPT} --eaphammer --ssid \"{ssid}\""
         if interface:
             cmd += f" --interface {interface}"
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
@@ -1275,7 +1295,7 @@ def action_pcredz():
     try:
         report = reporter.add_report("FORENSIC (PCREDZ)", safe_file_path or "LATEST CAPTURE", "Running",
                             "Parsing capture for plaintext credentials", log_file=log_file)
-        cmd = f"sudo {MITM_TOOLS_SCRIPT} --pcredz"
+        cmd = f"sudo bash {MITM_TOOLS_SCRIPT} --pcredz"
         if safe_file_path:
             cmd += f" --file \"{safe_file_path}\""
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
@@ -1297,7 +1317,7 @@ def action_throttle():
     
     log_file = gen_log_name("throttle")
     try:
-        cmd = f"sudo {VOIDPWN_DIR}/scripts/network/wifi_throttle.sh {shlex.quote(str(target))} {shlex.quote(str(speed))}"
+        cmd = f"sudo bash {VOIDPWN_DIR}/scripts/network/wifi_throttle.sh {shlex.quote(str(target))} {shlex.quote(str(speed))}"
         run_proc_and_capture(cmd, log_file=log_file)
         reporter.add_report("NETWORK (THROTTLE)", target, "Running", f"Limiting to {speed}", log_file=log_file)
         return jsonify({'status': 'success', 'message': f'Throttling {target} to {speed}'})
