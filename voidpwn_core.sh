@@ -527,10 +527,33 @@ AUTOLOGIN
     log_ok "Kiosk setup complete — Pi screen will open dashboard after next reboot"
 }
 
+fix_permissions() {
+    log_info "Fixing project file permissions in $ROOT_DIR..."
+
+    # Directories: traversable by all
+    find "$ROOT_DIR" -type d -exec chmod 755 {} +
+
+    # All regular files: owner rw, group/other r
+    find "$ROOT_DIR" -type f -exec chmod 644 {} +
+
+    # Shell scripts: executable by owner and group
+    find "$ROOT_DIR" -type f -name "*.sh" -exec chmod 755 {} +
+
+    # Python entry points: executable
+    find "$ROOT_DIR" -type f -name "*.py" -exec chmod 755 {} +
+
+    # Wordlists and output data: readable only (no exec)
+    find "$ROOT_DIR/wordlists" -type f -exec chmod 640 {} + 2>/dev/null || true
+    find "$ROOT_DIR/output"    -type f -exec chmod 640 {} + 2>/dev/null || true
+
+    log_ok "Permissions fixed"
+}
+
 do_install() {
     # Always re-register the service file so stale units from previous runs are replaced
     register_systemd_service
     open_firewall_port
+    fix_permissions
 
     if is_installed; then
         log_ok "Install marker exists; tool installation skipped"
