@@ -1466,11 +1466,29 @@ def summarize_log(content, max_lines=3000):
     return "\n".join(summary_parts)
 
 
-GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash']
+GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash']
+
+
+def _extract_api_message(body: str) -> str:
+    """Pull the human-readable message out of a JSON API error body."""
+    try:
+        err_json = json.loads(body)
+        # Gemini / OpenAI / Groq all use {"error": {"message": "..."}}
+        msg = (err_json.get('error') or {}).get('message')
+        if msg:
+            return msg
+        # Gemini sometimes: {"error": {"status": "...", "message": "..."}}
+        if isinstance(err_json.get('error'), str):
+            return err_json['error']
+    except Exception:
+        pass
+    # Fallback: return first 300 chars of raw body
+    return body[:300] if body else 'no body'
+
 
 def call_gemini(api_key, prompt):
-    """Call Gemini API with model fallback chain"""
-    last_err = None
+    """Call Gemini API with model fallback chain."""
+    last_err_msg = None
     for model in GEMINI_MODELS:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         payload = json.dumps({
@@ -1484,11 +1502,15 @@ def call_gemini(api_key, prompt):
             return result['candidates'][0]['content']['parts'][0]['text']
         except urllib.error.HTTPError as e:
             body = e.read().decode('utf-8', errors='replace')
-            if e.code == 404 or 'not found' in body.lower() or 'not supported' in body.lower():
-                last_err = e
-                continue  # Try next model
-            raise  # Re-raise non-model-not-found errors (auth, etc.)
-    raise last_err or Exception(f"No working Gemini model found. Tried: {', '.join(GEMINI_MODELS)}")
+            msg = _extract_api_message(body)
+            body_lower = body.lower()
+            # Model not available — try next in fallback chain
+            if e.code == 404 or 'not found' in body_lower or 'not supported' in body_lower or 'deprecated' in body_lower:
+                last_err_msg = f"gemini/{model} HTTP {e.code}: {msg}"
+                continue
+            # Any other error (400 bad request, 401 auth, 429 quota, etc.) — raise with full detail
+            raise RuntimeError(f"Gemini API error (HTTP {e.code}) [{model}]: {msg}")
+    raise RuntimeError(f"No working Gemini model found. Last error: {last_err_msg}. Tried: {', '.join(GEMINI_MODELS)}")
 
 
 def call_groq(api_key, prompt):
@@ -1503,9 +1525,13 @@ def call_groq(api_key, prompt):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }, method="POST")
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        result = json.loads(resp.read().decode('utf-8'))
-    return result['choices'][0]['message']['content']
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+        return result['choices'][0]['message']['content']
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        raise RuntimeError(f"Groq API error (HTTP {e.code}): {_extract_api_message(body)}")
 
 
 def call_openai(api_key, prompt):
@@ -1520,9 +1546,13 @@ def call_openai(api_key, prompt):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }, method="POST")
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        result = json.loads(resp.read().decode('utf-8'))
-    return result['choices'][0]['message']['content']
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+        return result['choices'][0]['message']['content']
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        raise RuntimeError(f"OpenAI API error (HTTP {e.code}): {_extract_api_message(body)}")
 
 
 @app.route('/api/ai/analyze', methods=['POST'])
@@ -1820,8 +1850,18 @@ Return ONLY valid JSON — no markdown, no explanation, no code fences — in ex
             raw = call_openai(api_key, prompt)
         else:
             return jsonify({'error': f'Unknown provider: {provider}'}), 400
+    except RuntimeError as e:
+        err = str(e)
+        add_live_log(f'[HEXSTRIKE] LLM error: {err}')
+        return jsonify({'error': err}), 503
+    except (socket.gaierror, socket.timeout, OSError) as e:
+        msg = 'No internet connection. AI analysis requires internet access.'
+        add_live_log(f'[HEXSTRIKE] {msg}')
+        return jsonify({'error': msg}), 502
     except Exception as e:
-        return jsonify({'error': f'LLM request failed: {str(e)}'}), 503
+        err = str(e)
+        add_live_log(f'[HEXSTRIKE] LLM unexpected error: {err}')
+        return jsonify({'error': f'LLM request failed: {err}'}), 503
 
     # Strip markdown fences if the LLM wrapped the JSON
     cleaned = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip(), flags=re.MULTILINE).strip()
