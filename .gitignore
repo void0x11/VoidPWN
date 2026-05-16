@@ -10,8 +10,6 @@ recon/
 *.gnmap
 *.xml
 
-# Ignore wordlists (too large)
-wordlists/
 *.txt.gz
 
 # Ignore LCD driver repo
