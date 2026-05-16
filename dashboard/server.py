@@ -53,6 +53,8 @@ def root_shell_cmd(cmd_str):
 def add_live_log(msg, type="info"):
     timestamp = datetime.now().strftime('%H:%M:%S')
     LIVE_LOGS.append({'time': timestamp, 'msg': msg, 'type': type})
+    # Mirror HUD logs to stdout so systemd/journald captures action lifecycle.
+    print(f"[HUD][{type.upper()}] {timestamp} {msg}", flush=True)
 
 def parse_inventory_info(line):
     """Parse a line of output for device info and update inventory"""
@@ -102,6 +104,8 @@ def run_proc_and_capture(cmd_str, log_file=None, report_id=None):
             bufsize=1,
             universal_newlines=True
         )
+        add_live_log(f"LAUNCH: {cmd_str}", "info")
+        add_live_log(f"PID: {proc.pid}", "info")
         
         def capture():
             log_path = os.path.join(LOGS_DIR, log_file) if log_file else None
@@ -1072,6 +1076,7 @@ def action_recon():
             log_file=log_file
         )
         
+        add_live_log(f"RECON STARTED: mode={mode} target={target}", "info")
         run_proc_and_capture(cmd, log_file=log_file, report_id=report['id'])
         return jsonify({'status': 'success', 'message': f'Starting {mode} scan on {target}...'})
     except Exception as e:
